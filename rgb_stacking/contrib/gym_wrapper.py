@@ -60,7 +60,6 @@ class GymWrapper(gym.Env):
     def close(self):
         self.env.close()
 
-
 def main(argv: Sequence[str]) -> None:
     del argv
 
@@ -73,7 +72,6 @@ def main(argv: Sequence[str]) -> None:
     print(env.step(env.action_space.sample()))
 
     env.close()
-
 
 if __name__ == '__main__':
     from absl import app

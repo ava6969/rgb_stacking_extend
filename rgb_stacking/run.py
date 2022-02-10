@@ -23,12 +23,18 @@ from contrib.a2c_ppo_acktr.evaluation import evaluate
 from absl import app
 from absl import flags
 from absl import logging
+from absl.flags import FLAGS
+from dm_robotics.agentflow import spec_utils
+
+flags.DEFINE_string('config_path',
+                    "/home/ava6969/rgb_stacking_extend/rgb_stacking/contrib/configs/CONFIG_A.yaml",
+                    'path to config')
 
 
 def main(argv: Sequence[str]) -> None:
     del argv
-
-    args = get_args("contrib/configs/CONFIG_A.yaml")
+    debug = FLAGS.debug_specs
+    args = get_args(FLAGS.config_path)
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -48,10 +54,8 @@ def main(argv: Sequence[str]) -> None:
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, device, False)
 
-    actor_critic = Policy(
-        envs.observation_space.shape,
-        envs.action_space,
-        base_kwargs={'recurrent': args.recurrent_policy})
+    actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
+
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -80,7 +84,8 @@ def main(argv: Sequence[str]) -> None:
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
                               envs.observation_space.shape, envs.action_space,
-                              actor_critic.recurrent_hidden_state_size)
+                              actor_critic.recurrent_hidden_state_size,
+                              args.recurrent_policy)
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
@@ -92,7 +97,7 @@ def main(argv: Sequence[str]) -> None:
     num_updates = int(
         args.num_env_steps) // args.num_steps // args.num_processes
     for j in range(num_updates):
-
+        actor_critic.eval()
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
             utils.update_linear_schedule(
@@ -130,6 +135,7 @@ def main(argv: Sequence[str]) -> None:
         rollouts.compute_returns(next_value, args.use_gae, args.gamma,
                                  args.gae_lambda, args.use_proper_time_limits)
 
+        actor_critic.train()
         value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
         rollouts.after_update()
@@ -152,7 +158,8 @@ def main(argv: Sequence[str]) -> None:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             end = time.time()
             print(
-                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n"
+                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
+                "min/max reward {:.1f}/{:.1f}\n "
                     .format(j, total_num_steps,
                             int(total_num_steps / (end - start)),
                             len(episode_rewards), np.mean(episode_rewards),
@@ -170,4 +177,7 @@ def main(argv: Sequence[str]) -> None:
 
 
 if __name__ == '__main__':
-    app.run(main)
+    try:
+        app.run(main)
+    except SystemExit:
+        pass
