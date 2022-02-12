@@ -1,30 +1,22 @@
-import copy
-import glob
 import os
 import time
 from collections import deque
 from typing import Sequence
-
-import gym
+from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 
-from contrib.a2c_ppo_acktr.a2c_ppo_acktr import algo, utils
-from contrib.a2c_ppo_acktr.a2c_ppo_acktr.algo import gail
-from contrib.a2c_ppo_acktr.a2c_ppo_acktr.arguments import get_args
-from contrib.a2c_ppo_acktr.a2c_ppo_acktr.envs import make_vec_envs
-from contrib.a2c_ppo_acktr.a2c_ppo_acktr.model import Policy
-from contrib.a2c_ppo_acktr.a2c_ppo_acktr.storage import RolloutStorage
-from contrib.a2c_ppo_acktr.evaluation import evaluate
+from a2c_ppo_acktr.a2c_ppo_acktr import algo, utils
+from rgb_stacking.contrib.arguments import get_args
+from a2c_ppo_acktr.a2c_ppo_acktr.envs import make_vec_envs
+from rgb_stacking.contrib.model import Policy
+from rgb_stacking.contrib.storage import RolloutStorage
+from a2c_ppo_acktr.evaluation import evaluate
 
 from absl import app
 from absl import flags
-from absl import logging
 from absl.flags import FLAGS
-from dm_robotics.agentflow import spec_utils
+
 
 flags.DEFINE_string('config_path',
                     "/home/ava6969/rgb_stacking_extend/rgb_stacking/contrib/configs/CONFIG_A.yaml",
@@ -32,10 +24,9 @@ flags.DEFINE_string('config_path',
 
 
 def main(argv: Sequence[str]) -> None:
-    del argv
-    debug = FLAGS.debug_specs
-    args = get_args(FLAGS.config_path)
 
+    args = get_args(FLAGS.config_path)
+    writer = SummaryWriter()
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
 
@@ -57,6 +48,7 @@ def main(argv: Sequence[str]) -> None:
     actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
 
     actor_critic.to(device)
+    print(actor_critic)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
@@ -83,15 +75,21 @@ def main(argv: Sequence[str]) -> None:
             actor_critic, args.value_loss_coef, args.entropy_coef, acktr=True)
 
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
-                              envs.observation_space.shape, envs.action_space,
-                              actor_critic.recurrent_hidden_state_size,
+                              envs.observation_space, envs.action_space,
+                              args.model.hidden_size,
                               args.recurrent_policy)
 
     obs = envs.reset()
-    rollouts.obs[0].copy_(obs)
+
+    if isinstance(obs, dict):
+        for k, o in obs.items():
+            rollouts.obs[k][0].copy_(o)
+    else:
+        rollouts.obs[0].copy_(obs)
+
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=10)
+    episode_rewards = deque(maxlen=100)
 
     start = time.time()
     num_updates = int(
@@ -108,7 +106,7 @@ def main(argv: Sequence[str]) -> None:
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                    rollouts.get_obs(step), rollouts.get_from_recurrent_state(step),
                     rollouts.masks[step])
 
             # Obser reward and next obs
@@ -129,11 +127,10 @@ def main(argv: Sequence[str]) -> None:
 
         with torch.no_grad():
             next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
+                rollouts.get_obs(-1), rollouts.get_from_recurrent_state(-1),
                 rollouts.masks[-1]).detach()
 
-        rollouts.compute_returns(next_value, args.use_gae, args.gamma,
-                                 args.gae_lambda, args.use_proper_time_limits)
+        rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.gae_lambda)
 
         actor_critic.train()
         value_loss, action_loss, dist_entropy = agent.update(rollouts)
@@ -166,6 +163,7 @@ def main(argv: Sequence[str]) -> None:
                             np.median(episode_rewards), np.min(episode_rewards),
                             np.max(episode_rewards), dist_entropy, value_loss,
                             action_loss))
+            writer.add_scalar('episode reward', float(np.mean(episode_rewards)), total_num_steps)
 
         if (args.eval_interval is not None and len(episode_rewards) > 1
                 and j % args.eval_interval == 0):
@@ -174,6 +172,7 @@ def main(argv: Sequence[str]) -> None:
                      args.num_processes, eval_log_dir, device)
 
     envs.close()
+    writer.close()
 
 
 if __name__ == '__main__':

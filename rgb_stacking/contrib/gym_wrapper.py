@@ -13,6 +13,7 @@ def flatten_dict(obs: Dict, keys):
 
 
 class GymWrapper(gym.Env):
+
     def __init__(self, object_triplet,
                  flatten=True,
                  discrete_n: int = None):
@@ -33,19 +34,22 @@ class GymWrapper(gym.Env):
         else:
             shape_map = dict()
             for k, v in obs_spec.items():
-                shape_map[k] = gym.spaces.Box(-np.inf, np.inf, v.shape)
+                shape_map[k] = gym.spaces.Box(-np.inf, np.inf, [np.prod(v.shape)])
             self.observation_space = gym.spaces.Dict(shape_map)
 
         if discrete_n:
             assert(discrete_n % 2 == 1, 'discrete_n must be odd')
-            self.action_space = gym.spaces.MultiDiscrete([discrete_n for _ in range(self.action_spec.shape[0])])
+            bins = [discrete_n for _ in range(self.action_spec.shape[0])]
+            bins[-1] = 2
+            self.action_space = gym.spaces.MultiDiscrete(bins)
             self.action_bins = [np.linspace(_min, _max, discrete_n)
-                                for _min, _max in zip(self.action_spec.minimum, self.action_spec.maximum)]
+                                for _min, _max in zip(self.action_spec.minimum[:-1], self.action_spec.maximum[:-1])]
+            self.action_bins.append(np.array([self.action_spec.minimum[-1], self.action_spec.maximum[-1]]))
         else:
             self.action_space = gym.spaces.Box(-1, 1, self.action_spec.shape)
 
     def observation(self, obs):
-        return flatten_dict(obs, self.flatten_order) if self.flatten else obs
+        return flatten_dict(obs, self.flatten_order) if self.flatten else {k: np.ravel(v) for k, v in obs.items()}
 
     def reset(self):
         return self.observation(self.env.reset().observation)
@@ -59,6 +63,7 @@ class GymWrapper(gym.Env):
 
     def close(self):
         self.env.close()
+
 
 def main(argv: Sequence[str]) -> None:
     del argv

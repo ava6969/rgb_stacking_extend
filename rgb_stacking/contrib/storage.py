@@ -1,4 +1,6 @@
+import gym
 import torch
+import numpy as np
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
 
@@ -7,15 +9,15 @@ def _flatten_helper(T, N, _tensor):
 
 
 class RolloutStorage(object):
-    def __init__(self, num_steps, num_processes, obs_shape, action_space,
-                 recurrent_hidden_state_size):
-        self.obs = torch.zeros(num_steps + 1, num_processes, *obs_shape)
-        self.recurrent_hidden_states = torch.zeros(
-            num_steps + 1, num_processes, recurrent_hidden_state_size)
+    def __init__(self, num_steps, num_processes, obs_space, action_space,
+                 recurrent_hidden_state_size, recurrent_policy):
+
         self.rewards = torch.zeros(num_steps, num_processes, 1)
         self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
+        self.has_lstm = recurrent_policy == 'lstm'
+
         if action_space.__class__.__name__ == 'Discrete':
             action_shape = 1
         else:
@@ -23,7 +25,23 @@ class RolloutStorage(object):
         self.actions = torch.zeros(num_steps, num_processes, action_shape)
         if action_space.__class__.__name__ == 'Discrete':
             self.actions = self.actions.long()
+
+        f = lambda: torch.zeros(num_steps + 1, num_processes, recurrent_hidden_state_size)
+
+        if recurrent_policy == 'gru':
+            self.recurrent_hidden_states = dict(actor=f(), critic=f())
+        else:
+            self.recurrent_hidden_states = dict(actor=(f(), f()), critic=(f(), f()))
+
+        if isinstance(obs_space, gym.spaces.Box):
+            self.obs = torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
+        else:
+            self.obs = {k: torch.zeros(num_steps + 1, num_processes, int(np.prod(obs_space.shape)))
+                        for k, obs_space in obs_space.spaces.items()}
+
         self.masks = torch.ones(num_steps + 1, num_processes, 1)
+
+        self.is_dict = isinstance(obs_space, gym.spaces.Dict)
 
         # Masks that indicate whether it's a true terminal state
         # or time limit end state
@@ -32,9 +50,35 @@ class RolloutStorage(object):
         self.num_steps = num_steps
         self.step = 0
 
+    def get_from_recurrent_state(self, step, fn = None):
+        actor = self.recurrent_hidden_states['actor']
+        critic = self.recurrent_hidden_states['critic']
+        if self.has_lstm:
+            return dict(actor=(actor[0][step], actor[1][step]),
+                        critic=(critic[0][step], critic[1][step])) if not fn \
+                else dict(actor=( fn(actor[0][step]), fn(actor[1][step])), critic=( fn(critic[0][step]),
+                                                                                    fn(critic[1][step])))
+        else:
+            return dict(actor=actor[step], critic=critic[step]) if not fn else dict(actor=fn(actor[step]),
+                                                                                    critic=fn(critic[step]))
+
+    def get_obs(self, index=None, fn=None):
+        if self.is_dict:
+            return {k: v[index] if fn is None else fn(v) for k, v in self.obs.items()}
+        else:
+            return self.obs[index] if fn is None else fn(self.obs)
+
     def to(self, device):
-        self.obs = self.obs.to(device)
-        self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
+        self.obs = {k: v.to(device) for k, v in self.obs.items()} if self.is_dict else self.obs.to(device)
+
+        if self.has_lstm:
+            for k in self.recurrent_hidden_states:
+                self.recurrent_hidden_states[k] = self.recurrent_hidden_states[k][0].to(device), \
+                                                  self.recurrent_hidden_states[k][1].to(device)
+        else:
+            for k in self.recurrent_hidden_states:
+                self.recurrent_hidden_states[k] = self.recurrent_hidden_states[k].to(device)
+
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
         self.returns = self.returns.to(device)
@@ -45,9 +89,13 @@ class RolloutStorage(object):
 
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs,
                value_preds, rewards, masks, bad_masks):
-        self.obs[self.step + 1].copy_(obs)
-        self.recurrent_hidden_states[self.step +
-                                     1].copy_(recurrent_hidden_states)
+
+        if not self.is_dict:
+            self.obs[self.step + 1].copy_(obs)
+        else:
+            for k, v in obs.items():
+                self.obs[k][self.step + 1].copy_(v)
+
         self.actions[self.step].copy_(actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
         self.value_preds[self.step].copy_(value_preds)
@@ -55,54 +103,54 @@ class RolloutStorage(object):
         self.masks[self.step + 1].copy_(masks)
         self.bad_masks[self.step + 1].copy_(bad_masks)
 
+        if self.has_lstm:
+            for k in self.recurrent_hidden_states:
+                self.recurrent_hidden_states[k][0][self.step + 1].copy_(recurrent_hidden_states[k][0])
+                self.recurrent_hidden_states[k][1][self.step + 1].copy_(recurrent_hidden_states[k][1])
+        else:
+            self.recurrent_hidden_states['actor'][self.step + 1].copy_(recurrent_hidden_states['actor'])
+            self.recurrent_hidden_states['critic'][self.step + 1].copy_(recurrent_hidden_states['critic'])
+
         self.step = (self.step + 1) % self.num_steps
 
     def after_update(self):
-        self.obs[0].copy_(self.obs[-1])
-        self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
+        if not self.is_dict:
+            self.obs[0].copy_(self.obs[-1])
+        else:
+            for k, v in self.obs.items():
+                self.obs[k][0].copy_(v[-1])
+
         self.masks[0].copy_(self.masks[-1])
         self.bad_masks[0].copy_(self.bad_masks[-1])
+
+        if self.has_lstm:
+            for k in self.recurrent_hidden_states:
+                self.recurrent_hidden_states[k][0][self.step + 1].copy_(self.recurrent_hidden_states[k][0][-1])
+                self.recurrent_hidden_states[k][1][self.step + 1].copy_(self.recurrent_hidden_states[k][1][-1])
+        else:
+            self.recurrent_hidden_states['actor'][self.step + 1].copy_(self.recurrent_hidden_states['actor'][-1])
+            self.recurrent_hidden_states['critic'][self.step + 1].copy_(self.recurrent_hidden_states['critic'])
 
     def compute_returns(self,
                         next_value,
                         use_gae,
                         gamma,
-                        gae_lambda,
-                        use_proper_time_limits=True):
-        if use_proper_time_limits:
-            if use_gae:
-                self.value_preds[-1] = next_value
-                gae = 0
-                for step in reversed(range(self.rewards.size(0))):
-                    delta = self.rewards[step] + gamma * self.value_preds[
-                        step + 1] * self.masks[step +
-                                               1] - self.value_preds[step]
-                    gae = delta + gamma * gae_lambda * self.masks[step +
-                                                                  1] * gae
-                    gae = gae * self.bad_masks[step + 1]
-                    self.returns[step] = gae + self.value_preds[step]
-            else:
-                self.returns[-1] = next_value
-                for step in reversed(range(self.rewards.size(0))):
-                    self.returns[step] = (self.returns[step + 1] * \
-                        gamma * self.masks[step + 1] + self.rewards[step]) * self.bad_masks[step + 1] \
-                        + (1 - self.bad_masks[step + 1]) * self.value_preds[step]
+                        gae_lambda):
+        if use_gae:
+            self.value_preds[-1] = next_value
+            gae = 0
+            for step in reversed(range(self.rewards.size(0))):
+                delta = self.rewards[step] + gamma * self.value_preds[
+                    step + 1] * self.masks[step +
+                                           1] - self.value_preds[step]
+                gae = delta + gamma * gae_lambda * self.masks[step +
+                                                              1] * gae
+                self.returns[step] = gae + self.value_preds[step]
         else:
-            if use_gae:
-                self.value_preds[-1] = next_value
-                gae = 0
-                for step in reversed(range(self.rewards.size(0))):
-                    delta = self.rewards[step] + gamma * self.value_preds[
-                        step + 1] * self.masks[step +
-                                               1] - self.value_preds[step]
-                    gae = delta + gamma * gae_lambda * self.masks[step +
-                                                                  1] * gae
-                    self.returns[step] = gae + self.value_preds[step]
-            else:
-                self.returns[-1] = next_value
-                for step in reversed(range(self.rewards.size(0))):
-                    self.returns[step] = self.returns[step + 1] * \
-                        gamma * self.masks[step + 1] + self.rewards[step]
+            self.returns[-1] = next_value
+            for step in reversed(range(self.rewards.size(0))):
+                self.returns[step] = self.returns[step + 1] * \
+                                     gamma * self.masks[step + 1] + self.rewards[step]
 
     def feed_forward_generator(self,
                                advantages,
@@ -140,7 +188,7 @@ class RolloutStorage(object):
                 adv_targ = advantages.view(-1, 1)[indices]
 
             yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
+                  value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
 
     def recurrent_generator(self, advantages, num_mini_batch):
         num_processes = self.rewards.size(1)
@@ -195,8 +243,8 @@ class RolloutStorage(object):
             return_batch = _flatten_helper(T, N, return_batch)
             masks_batch = _flatten_helper(T, N, masks_batch)
             old_action_log_probs_batch = _flatten_helper(T, N, \
-                    old_action_log_probs_batch)
+                                                         old_action_log_probs_batch)
             adv_targ = _flatten_helper(T, N, adv_targ)
 
             yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
+                  value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
