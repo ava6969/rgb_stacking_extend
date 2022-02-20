@@ -1,6 +1,6 @@
 env_name: StackRGBTestTripletDict-v1
-num_processes: 1
-no_cuda: False
+num_processes: 2
+no_cuda: True
 algo: a2c
 lr: 7.0e-4
 alpha: 0.99
