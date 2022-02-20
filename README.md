@@ -1,3 +1,6 @@
+# PATCH
+* cp patch/dm_robotics/agentflow/spec_utils.py ~/.local/lib/python*/site-packages/dm_robotics/agentflow/spec_utils.py
+
 # RGB-stacking &#128721;&#129001;&#128311; for robotic manipulation
 ### [BLOG](https://deepmind.com/blog/article/stacking-our-way-to-more-general-robots) | [PAPER][pick_and_place_paper] | [VIDEO](https://youtu.be/BxOKPEtMuZw)
 
@@ -6,7 +9,7 @@ Alex X. Lee*, Coline Devin*, Yuxiang Zhou*, Thomas Lampe*, Konstantinos Bousmali
 In *Conference on Robot Learning (CoRL)*, 2021.
 
 <img src="./doc/images/rgb_environment.png" alt="The RGB environment" width="500" height="400"/>
-
+cp patch/dm_robotics/agentflow/spec_utils.py ~/.local/lib/python*/site-packages/dm_robotics/agentflow/spec_utils.py 
 This repository contains an implementation of the simulation environment
 described in the paper
 ["Beyond Pick-and-Place: Tackling robotic stacking of diverse shapes"][pick_and_place_paper].
