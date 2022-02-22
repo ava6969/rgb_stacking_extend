@@ -1,0 +1,59 @@
+env_name: StackRGBTestTripletDict-v1
+num_processes: 128
+no_cuda: False
+algo: a2c
+lr: 7.0e-4
+alpha: 0.99
+gamma: 0.99
+eps: 1.0e-5
+use_gae: True
+gae_lambda: 0.95
+entropy_coef: 0.01
+value_loss_coef: 0.5
+max_grad_norm: 0.5
+seed: 1
+cuda_deterministic: False
+num_steps: 32
+log_interval: 100
+save_interval: 100
+num_env_steps: 1.0e+8
+log_dir: '/tmp/gym/'
+save_dir: './trained_models/'
+recurrent_policy: lstm
+use_proper_time_limits: False
+eval_interval: null
+use_linear_lr_decay: True
+
+model:
+  feature_extract:
+    embed_out: 512
+    vision_out: 512
+    flatten_out: 512
+    post: sum
+    act_fn: relu
+    heads: 4
+    embed_dim: 512
+    layer_norm: True
+    post_layer_norm: True
+
+  policy_keys: &1 ['action/environment',
+  'gripper/grasp',
+  'gripper/joints/angle',
+  'gripper/joints/velocity',
+  'rgb30_blue/abs_pose',
+  'rgb30_blue/to_pinch',
+  'rgb30_green/abs_pose',
+  'rgb30_green/to_pinch',
+  'rgb30_red/abs_pose',
+  'rgb30_red/to_pinch',
+  'sawyer/joints/angle',
+  'sawyer/joints/torque',
+  'sawyer/joints/velocity',
+  'sawyer/pinch/pose',
+  'sawyer/tcp/pose',
+  'sawyer/tcp/velocity',
+  'wrist/force',
+  'wrist/torque']
+
+  value_keys: *1
+
