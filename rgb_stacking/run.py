@@ -47,7 +47,7 @@ def main(argv: Sequence[str]) -> None:
     envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
                          args.gamma, args.log_dir, device, False)
 
-    actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
+    actor_critic = torch.nn.DataParallel(Policy(envs.observation_space, envs.action_space, args.model))
 
     actor_critic.to(device)
     print(actor_critic)

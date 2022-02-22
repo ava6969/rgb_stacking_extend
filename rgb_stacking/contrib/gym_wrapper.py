@@ -78,6 +78,7 @@ def main(argv: Sequence[str]) -> None:
 
     env.close()
 
+
 if __name__ == '__main__':
     from absl import app
     app.run(main)
