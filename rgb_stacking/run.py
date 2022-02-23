@@ -109,6 +109,7 @@ def main(argv: Sequence[str]) -> None:
                 utils.update_linear_schedule(
                     agent.actor_critic_optimizer, j, num_updates,
                     agent.actor_critic_optimizer.plr if args.algo == "acktr" else args.plr)
+                writer.add_scalar('LearningRate/ActorCritic', agent.actor_critic_optimizer.plr, j)
             else:
                 utils.update_linear_schedule(
                     agent.actor_optimizer, j, num_updates,
@@ -116,6 +117,8 @@ def main(argv: Sequence[str]) -> None:
                 utils.update_linear_schedule(
                     agent.critic_optimizer, j, num_updates,
                     agent.critic_optimizer.vlr if args.algo == "acktr" else args.vlr)
+                writer.add_scalar('LearningRate/Critic', agent.critic_optimizer.vlr, j)
+                writer.add_scalar('LearningRate/Actor', agent.actor_optimizer.plr, j)
 
         for step in range(args.num_steps):
             # Sample actions
@@ -170,22 +173,30 @@ def main(argv: Sequence[str]) -> None:
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             end = time.time()
+            fps = int(total_num_steps / (end - start))
             print(
                 "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
                 "min/max reward {:.1f}/{:.1f}\n "
                     .format(j, total_num_steps,
-                            int(total_num_steps / (end - start)),
+                            fps,
                             len(episode_rewards), np.mean(episode_rewards),
                             np.median(episode_rewards), np.min(episode_rewards),
                             np.max(episode_rewards), dist_entropy, value_loss,
                             action_loss))
-            writer.add_scalar('episode reward', float(np.mean(episode_rewards)), total_num_steps)
+
+            writer.add_scalar('Reward/Mean', float(np.mean(episode_rewards)), total_num_steps)
+            writer.add_scalar('Reward/Min', float(np.min(episode_rewards)), total_num_steps)
+            writer.add_scalar('Reward/Median', float(np.median(episode_rewards)), total_num_steps)
+            writer.add_scalar('Reward/Max', float(np.max(episode_rewards)), total_num_steps)
+            writer.add_scalar('Timing/FPS', fps, total_num_steps)
 
         if (args.eval_interval is not None and len(episode_rewards) > 1
                 and j % args.eval_interval == 0):
             obs_rms = utils.get_vec_normalize(envs).obs_rms
             evaluate(actor_critic, obs_rms, args.env_name, args.seed,
                      args.num_processes, eval_log_dir, device)
+
+        writer.add_scalar('Timing/Updates', j, j)
 
     envs.close()
     writer.close()
