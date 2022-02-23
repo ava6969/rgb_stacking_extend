@@ -8,7 +8,9 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import torch
 
-from a2c_ppo_acktr.a2c_ppo_acktr import algo, utils
+from a2c_ppo_acktr.a2c_ppo_acktr import utils
+import a2c_ppo_acktr.a2c_ppo_acktr.algo as shared_algo
+from rgb_stacking.contrib import algo
 from rgb_stacking.contrib.arguments import get_args
 from a2c_ppo_acktr.a2c_ppo_acktr.envs import make_vec_envs
 from rgb_stacking.contrib.model import Policy
@@ -55,12 +57,14 @@ def main(argv: Sequence[str]) -> None:
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
             actor_critic,
-            args.value_loss_coef,
             args.entropy_coef,
-            lr=args.lr,
+            args.value_loss_coef,
+            vlr=args.vlr,
+            plr=args.plr,
             eps=args.eps,
             alpha=args.alpha,
             max_grad_norm=args.max_grad_norm)
+
     elif args.algo == 'ppo':
         agent = algo.PPO(
             actor_critic,
@@ -72,6 +76,7 @@ def main(argv: Sequence[str]) -> None:
             lr=args.lr,
             eps=args.eps,
             max_grad_norm=args.max_grad_norm)
+
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(
             actor_critic, args.value_loss_coef, args.entropy_coef, acktr=True)
@@ -79,7 +84,7 @@ def main(argv: Sequence[str]) -> None:
     rollouts = RolloutStorage(args.num_steps, args.num_processes,
                               envs.observation_space, envs.action_space,
                               args.model.hidden_size,
-                              args.recurrent_policy)
+                              args.model.rec_type)
 
     obs = envs.reset()
 
@@ -100,9 +105,17 @@ def main(argv: Sequence[str]) -> None:
         actor_critic.eval()
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
-            utils.update_linear_schedule(
-                agent.optimizer, j, num_updates,
-                agent.optimizer.lr if args.algo == "acktr" else args.lr)
+            if agent.shared_model:
+                utils.update_linear_schedule(
+                    agent.actor_critic_optimizer, j, num_updates,
+                    agent.actor_critic_optimizer.plr if args.algo == "acktr" else args.plr)
+            else:
+                utils.update_linear_schedule(
+                    agent.actor_optimizer, j, num_updates,
+                    agent.actor_optimizer.plr if args.algo == "acktr" else args.plr)
+                utils.update_linear_schedule(
+                    agent.critic_optimizer, j, num_updates,
+                    agent.critic_optimizer.vlr if args.algo == "acktr" else args.vlr)
 
         for step in range(args.num_steps):
             # Sample actions
@@ -135,6 +148,7 @@ def main(argv: Sequence[str]) -> None:
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.gae_lambda)
 
         actor_critic.train()
+
         value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
         rollouts.after_update()

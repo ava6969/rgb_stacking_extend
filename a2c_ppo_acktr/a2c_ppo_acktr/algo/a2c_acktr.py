@@ -8,8 +8,8 @@ from a2c_ppo_acktr.a2c_ppo_acktr.algo.kfac import KFACOptimizer
 class A2C_ACKTR():
     def __init__(self,
                  actor_critic,
-                 value_loss_coef,
                  entropy_coef,
+                 value_loss_coef,
                  lr=None,
                  eps=None,
                  alpha=None,

@@ -129,7 +129,7 @@ class RolloutStorage(object):
                 self.recurrent_hidden_states[k][1][self.step + 1].copy_(self.recurrent_hidden_states[k][1][-1])
         else:
             self.recurrent_hidden_states['actor'][self.step + 1].copy_(self.recurrent_hidden_states['actor'][-1])
-            self.recurrent_hidden_states['critic'][self.step + 1].copy_(self.recurrent_hidden_states['critic'])
+            self.recurrent_hidden_states['critic'][self.step + 1].copy_(self.recurrent_hidden_states['critic'][-1])
 
     def compute_returns(self,
                         next_value,

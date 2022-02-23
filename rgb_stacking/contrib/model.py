@@ -3,45 +3,74 @@ import torch
 
 from rgb_stacking.contrib.arguments import PolicyOption
 import gym
-from a2c_ppo_acktr.a2c_ppo_acktr.distributions import DiagGaussian, MultiCategorical
+from a2c_ppo_acktr.a2c_ppo_acktr.distributions import DiagGaussian, MultiCategorical, Categorical
 from rgb_stacking.contrib.common import *
+
+
+class BasicPolicy(nn.Module):
+    def __init__(self,
+                 obs_space: gym.Space,
+                 option: PolicyOption,
+                 policy: bool,
+                 output_layer):
+        super(BasicPolicy, self).__init__()
+        self.feature_extractor, out_size = build_feature_extract(obs_space, option, policy)
+        self.rec_net = RecurrentNet(out_size, option)
+
+        if isinstance(obs_space, gym.spaces.Dict):
+            post_t = option.feature_extract['post']
+            self.post_process_feature_extract = Sum(1) if post_t == 'sum' else Mean(1) if post_t == 'mean' else \
+                ResidualSelfAttentionBlock(out_size,
+                                           option.feature_extract['heads'],
+                                           option.feature_extract['embed_dim'],
+                                           option.feature_extract['layer_norm'],
+                                           option.feature_extract['post_layer_norm'])
+        else:
+            layers = [option.feature_extract['flatten_out']]*option.feature_extract['mlp_dim']
+            self.post_process_feature_extract = torch.nn.Sequential()
+            for i, (in_, out_) in enumerate(zip(layers[:-1], layers[1:]), 1):
+                self.post_process_feature_extract.add_module("layer" + str(i), torch.nn.Linear(in_, out_))
+                if i + 1 < option.feature_extract['mlp_dim']:
+                    self.post_process_feature_extract.add_module("relu" + str(i), torch.nn.ReLU())
+
+        self.output_layer = output_layer
+
+    def forward(self, inputs, rnn_hxs, masks):
+        if isinstance(inputs, dict):
+            features = []
+            for k, feature in inputs.items():
+                features.append(self.feature_extractor[k](feature))
+
+            post_processed = self.post_process_feature_extract(torch.stack(features, 1))
+
+        else:
+            post_processed = self.feature_extractor(inputs)
+
+        recurrent_features, rnn_hxs = self.rec_net(post_processed, rnn_hxs, masks)
+        return self.output_layer(recurrent_features), rnn_hxs
 
 
 class Policy(nn.Module):
     def __init__(self, obs_space: gym.Space, action_space, option: PolicyOption):
         super(Policy, self).__init__()
 
-        self.feature_extract_policy, p_out_size = build_feature_extract(obs_space, option, True)
-        self.feature_extract_value, v_out_size = build_feature_extract(obs_space, option, False)
+        self.critic = BasicPolicy(obs_space, option, False,
+                                  init_(nn.Linear(option.hidden_size, 1)))
 
-        self.policy_net = RecurrentNet(p_out_size, option)
-        self.value_net = RecurrentNet(v_out_size, option)
-        self.critic_layer = init_(nn.Linear(option.hidden_size, 1))
-
-        self._is_recurrent = option.rec_type != 'none'
+        self._is_recurrent = option.rec_type is not None
         self._recurrent_hidden_state_size = option.hidden_size if self._is_recurrent else 1
-
-        post_t = option.feature_extract['post']
-
-        self.policy_feature_post = Sum(1) if post_t == 'sum' else Mean(1) if post_t == 'mean' else \
-            ResidualSelfAttentionBlock(p_out_size, option.feature_extract['heads'],
-                                       option.feature_extract['embed_dim'],
-                                       option.feature_extract['layer_norm'],
-                                       option.feature_extract['post_layer_norm'])
-
-        self.critic_feature_post = Sum(1) if post_t == 'sum' else Mean(1) if post_t == 'mean' else \
-            ResidualSelfAttentionBlock(v_out_size, option.feature_extract['heads'],
-                                       option.feature_extract['embed_dim'],
-                                       option.feature_extract['layer_norm'],
-                                       option.feature_extract['post_layer_norm'])
 
         if action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
-            self.dist = DiagGaussian(self.base.output_size, num_outputs)
+            dist = DiagGaussian(self.base.output_size, num_outputs)
         elif action_space.__class__.__name__ == "MultiDiscrete":
-            self.dist = MultiCategorical(option.hidden_size, action_space.nvec)
+            dist = MultiCategorical(option.hidden_size, action_space.nvec)
+        elif action_space.__class__.__name__ == "Discrete":
+            dist = Categorical(option.hidden_size, action_space.n)
         else:
             raise NotImplementedError
+
+        self.actor = BasicPolicy(obs_space, option, True, dist)
 
     @property
     def is_recurrent(self):
@@ -53,25 +82,12 @@ class Policy(nn.Module):
         return self._recurrent_hidden_state_size
 
     def forward(self, inputs, rnn_hxs, masks):
-
-        if isinstance(inputs, dict):
-            features = [], []
-            for k, feature in inputs.items():
-                features[0].append(self.feature_extract_policy[k](feature))
-                features[1].append(self.feature_extract_value[k](feature))
-
-            actor_in, value_in = self.policy_feature_post(torch.stack(features[0], 1)), \
-                                 self.critic_feature_post(torch.stack(features[1], 1))
-        else:
-            actor_in, value_in = self.feature_extract_policy(inputs), self.feature_extract_value(inputs)
-
-        actor_features, rnn_hxs['actor'] = self.policy_net(actor_in, rnn_hxs['actor'], masks)
-        value, rnn_hxs['critic'] = self.value_net(value_in, rnn_hxs['critic'], masks)
-        return self.critic_layer(value), actor_features, rnn_hxs
+        logit, rnn_hxs['actor'] = self.actor(inputs, rnn_hxs['actor'], masks)
+        value, rnn_hxs['critic'] = self.critic(inputs, rnn_hxs['critic'], masks)
+        return value, logit, rnn_hxs
 
     def act(self, inputs, rnn_hxs, masks, deterministic=False):
-        value, actor_features, rnn_hxs = self.forward(inputs, rnn_hxs, masks)
-        dist = self.dist(actor_features)
+        value, dist, rnn_hxs = self.forward(inputs, rnn_hxs, masks)
 
         if deterministic:
             action = dist.mode()
@@ -79,7 +95,6 @@ class Policy(nn.Module):
             action = dist.sample()
 
         action_log_probs = dist.log_prob(action).view(-1, 1)
-        dist_entropy = dist.entropy().mean()
 
         return value, action, action_log_probs, rnn_hxs
 
@@ -88,8 +103,7 @@ class Policy(nn.Module):
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
-        value, actor_features, rnn_hxs = self.forward(inputs, rnn_hxs, masks)
-        dist = self.dist(actor_features)
+        value, dist, rnn_hxs = self.forward(inputs, rnn_hxs, masks)
 
         action_log_probs = dist.log_prob(action).view(-1, 1)
         dist_entropy = dist.entropy().mean()
@@ -110,7 +124,7 @@ class RecurrentNet(nn.Module):
         self.lstm = option.rec_type == 'lstm'
 
     def attr(self, hxs, fnc):
-        return fnc(hxs[0]), fnc(hxs[1]) if self.lstm else fnc(hxs)
+        return [fnc(hxs[0]), fnc(hxs[1])] if self.lstm else fnc(hxs)
 
     def forward(self, x, hxs, masks):
         x = self.base(x)

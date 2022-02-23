@@ -10,17 +10,18 @@ class PolicyOption:
     policy_keys: Dict = None
     value_keys: Dict = None
     image_keys: Dict = None
-    fc_size = 1024
+    fc_size = 256
     act_fn = 'relu'
-    rec_type = 'lstm'
-    hidden_size = 512
+    rec_type: str = None
+    hidden_size = 256
 
 
 @dataclass
 class Arg:
     model: PolicyOption = None
     algo: str = 'a2c'
-    lr: float = 7e-4
+    plr: float = 7e-4
+    vlr: float = 1e-4
     alpha: float = 0.99
     gamma: float = 0.99
     eps: float = 1e-5
