@@ -1,5 +1,4 @@
 env_name: StackRGBTestTripletDict-v1
-#env_name: StackRGBTestTriplet-v1
 num_processes: 128
 no_cuda: False
 algo: a2c
@@ -18,12 +17,12 @@ cuda_deterministic: False
 num_steps: 10
 log_interval: 100
 save_interval: 100
-num_env_steps: 1.0e+8
+num_env_steps: 1.0e+7
 log_dir: '/tmp/gym/'
 save_dir: './trained_models/'
 use_proper_time_limits: False
 eval_interval: null
-use_linear_lr_decay: False
+use_linear_lr_decay: True
 
 model:
   rec_type: lstm

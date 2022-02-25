@@ -14,8 +14,8 @@ class BasicPolicy(nn.Module):
                  policy: bool,
                  output_layer):
         super(BasicPolicy, self).__init__()
+
         self.feature_extractor, out_size = build_feature_extract(obs_space, option, policy)
-        self.rec_net = RecurrentNet(out_size, option)
 
         if isinstance(obs_space, gym.spaces.Dict):
             post_t = option.feature_extract['post']
@@ -25,14 +25,8 @@ class BasicPolicy(nn.Module):
                                            option.feature_extract['embed_dim'],
                                            option.feature_extract['layer_norm'],
                                            option.feature_extract['post_layer_norm'])
-        else:
-            layers = [option.feature_extract['flatten_out']]*option.feature_extract['mlp_dim']
-            self.post_process_feature_extract = torch.nn.Sequential()
-            for i, (in_, out_) in enumerate(zip(layers[:-1], layers[1:]), 1):
-                self.post_process_feature_extract.add_module("layer" + str(i), torch.nn.Linear(in_, out_))
-                if i + 1 < option.feature_extract['mlp_dim']:
-                    self.post_process_feature_extract.add_module("relu" + str(i), torch.nn.ReLU())
 
+        self.rec_net = RecurrentNet(out_size, option)
         self.output_layer = output_layer
 
     def forward(self, inputs, rnn_hxs, masks):
@@ -41,12 +35,11 @@ class BasicPolicy(nn.Module):
             for k, feature in inputs.items():
                 features.append(self.feature_extractor[k](feature))
 
-            post_processed = self.post_process_feature_extract(torch.stack(features, 1))
-
+            inputs = self.post_process_feature_extract(torch.stack(features, 1))
         else:
-            post_processed = self.feature_extractor(inputs)
+            inputs = self.feature_extractor(inputs)
 
-        recurrent_features, rnn_hxs = self.rec_net(post_processed, rnn_hxs, masks)
+        recurrent_features, rnn_hxs = self.rec_net(inputs, rnn_hxs, masks)
         return self.output_layer(recurrent_features), rnn_hxs
 
 
@@ -57,8 +50,8 @@ class Policy(nn.Module):
         self.critic = BasicPolicy(obs_space, option, False,
                                   init_(nn.Linear(option.hidden_size, 1)))
 
-        self._is_recurrent = option.rec_type is not None
-        self._recurrent_hidden_state_size = option.hidden_size if self._is_recurrent else 1
+        self.rec_type = option.rec_type
+        self._recurrent_hidden_state_size = option.hidden_size if self.is_recurrent else 1
 
         if action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
@@ -74,7 +67,16 @@ class Policy(nn.Module):
 
     @property
     def is_recurrent(self):
-        return self._is_recurrent
+        return self.rec_type is not None
+
+    def zero_state(self, batch_size, rect_type=None):
+        f = lambda: torch.zeros(batch_size, self._recurrent_hidden_state_size)
+        _type = rect_type if rect_type else self.rec_type
+
+        if _type == "lstm":
+            return dict(actor=(f(), f()), critic=(f(), f()))
+        else:
+            return dict(actor=f(), critic=f())
 
     @property
     def recurrent_hidden_state_size(self):
@@ -114,13 +116,18 @@ class Policy(nn.Module):
 class RecurrentNet(nn.Module):
     def __init__(self, input_size, option: PolicyOption):
         super(RecurrentNet, self).__init__()
-        act_fn_map = dict(relu=torch.nn.ReLU(), tanh=torch.nn.Tanh(), elu=torch.nn.ELU())
-        self.base = torch.nn.Sequential(act_fn_map[option.act_fn],
-                                        init_(torch.nn.Linear(input_size, option.fc_size)),
-                                        act_fn_map[option.act_fn])
-
         base_fn = torch.nn.LSTM if option.rec_type == 'lstm' else torch.nn.GRU
-        self.recurrent_net = init_rec(base_fn(option.fc_size, option.hidden_size))
+
+        if 'post' in option.feature_extract:
+            act_fn_map = dict(relu=torch.nn.ReLU(), tanh=torch.nn.Tanh(), elu=torch.nn.ELU())
+            self.base = torch.nn.Sequential(act_fn_map[option.act_fn],
+                                            init_(torch.nn.Linear(input_size, option.fc_size)),
+                                            act_fn_map[option.act_fn])
+            self.recurrent_net = init_rec(base_fn(option.fc_size, option.hidden_size))
+        else:
+            self.base = torch.nn.ReLU()
+            self.recurrent_net = init_rec(base_fn(option.feature_extract['flatten_out'], option.hidden_size))
+
         self.lstm = option.rec_type == 'lstm'
 
     def attr(self, hxs, fnc):

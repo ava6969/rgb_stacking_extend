@@ -1,6 +1,7 @@
 from abc import ABC
 from typing import Dict, Sequence, Optional
 
+import cv2
 import gym
 import numpy
 import numpy as np
@@ -71,6 +72,11 @@ class GymWrapper(gym.Env):
 
     def reset(self):
         return self.observation(self.env.reset().observation)
+
+    def render(self, mode="human"):
+        cam = self.env.physics.render(camera_id='main_camera', width=480, height=240)
+        cv2.imshow('Main Camera', cv2.cvtColor(cam, cv2.COLOR_BGR2RGB))
+        cv2.waitKey(1)
 
     def step(self, action: numpy.ndarray):
 
