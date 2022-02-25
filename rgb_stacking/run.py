@@ -108,17 +108,18 @@ def main(argv: Sequence[str]) -> None:
             if agent.shared_model:
                 utils.update_linear_schedule(
                     agent.actor_critic_optimizer, j, num_updates,
-                    agent.actor_critic_optimizer.plr if args.algo == "acktr" else args.plr)
+                    agent.actor_critic_optimizer.lr if args.algo == "acktr" else args.plr)
                 writer.add_scalar('LearningRate/ActorCritic', agent.actor_critic_optimizer.plr, j)
             else:
                 utils.update_linear_schedule(
                     agent.actor_optimizer, j, num_updates,
-                    agent.actor_optimizer.plr if args.algo == "acktr" else args.plr)
+                    agent.actor_optimizer.lr if args.algo == "acktr" else args.plr)
                 utils.update_linear_schedule(
                     agent.critic_optimizer, j, num_updates,
-                    agent.critic_optimizer.vlr if args.algo == "acktr" else args.vlr)
-                writer.add_scalar('LearningRate/Critic', agent.critic_optimizer.vlr, j)
-                writer.add_scalar('LearningRate/Actor', agent.actor_optimizer.plr, j)
+                    agent.critic_optimizer.lr if args.algo == "acktr" else args.vlr)
+
+                writer.add_scalar('LearningRate/Critic', args.vlr, j)
+                writer.add_scalar('LearningRate/Actor', args.plr, j)
 
         for step in range(args.num_steps):
             # Sample actions
