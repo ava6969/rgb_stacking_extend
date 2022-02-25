@@ -29,7 +29,7 @@ use_linear_lr_decay: True
 model:
   rec_type: lstm
   hidden_size: 512
-
+  horizon_length:
   feature_extract:
     embed_out: 512
     vision_out: 512

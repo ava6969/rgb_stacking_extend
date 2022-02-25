@@ -129,6 +129,7 @@ class RecurrentNet(nn.Module):
             self.recurrent_net = init_rec(base_fn(option.feature_extract['flatten_out'], option.hidden_size))
 
         self.lstm = option.rec_type == 'lstm'
+        self.horizon_length = option.horizon_length
 
     def attr(self, hxs, fnc):
         return [fnc(hxs[0]), fnc(hxs[1])] if self.lstm else fnc(hxs)
@@ -146,6 +147,9 @@ class RecurrentNet(nn.Module):
         else:
             # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
             T = int(x.size(0) / N)
+            N_ = T // self.horizon_length
+            N = N * N_
+            T = self.horizon_length
 
             # unflatten
             x = x.view(T, N, x.size(1))
@@ -171,7 +175,7 @@ class RecurrentNet(nn.Module):
             # add t=0 and t=T to the list
             has_zeros = [0] + has_zeros + [T]
 
-            hxs = self.attr(hxs, lambda _x: _x.unsqueeze(0))
+            hxs = self.attr(hxs, lambda _x: torch.repeat_interleave(_x.unsqueeze(0), N_, 0).view(N, -1))
             outputs = []
             for i in range(len(has_zeros) - 1):
                 # We can now process steps that don't have any zeros in masks together!

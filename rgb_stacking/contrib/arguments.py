@@ -14,6 +14,7 @@ class PolicyOption:
     act_fn = 'relu'
     rec_type: str = None
     hidden_size = 256
+    horizon_length: int = None
 
 
 @dataclass
@@ -70,6 +71,10 @@ def get_args(path):
             args.__setattr__(key, parse_model(node[key]))
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+    if not args.model.horizon_length:
+        args.model.horizon_length  = args.num_steps
+
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
     if args.recurrent_policy is not None:
