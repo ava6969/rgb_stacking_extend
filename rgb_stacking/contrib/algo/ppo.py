@@ -2,34 +2,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from rgb_stacking.contrib.algo.a2c_acktr import A2C_ACKTR
 
 
-class PPO():
-    def __init__(self,
-                 actor_critic,
-                 clip_param,
-                 ppo_epoch,
-                 num_mini_batch,
-                 value_loss_coef,
-                 entropy_coef,
-                 lr=None,
-                 eps=None,
-                 max_grad_norm=None,
-                 use_clipped_value_loss=True):
+class PPO(A2C_ACKTR):
 
-        self.actor_critic = actor_critic
-
+    def __init__(self, actor_critic, clip_param, ppo_epoch, num_mini_batch, entropy_coef,
+                 value_loss_coef=None,
+                 vlr=None, plr=None, eps=None, max_grad_norm=None, use_clipped_value_loss=True):
+        super().__init__(actor_critic, entropy_coef, value_loss_coef, vlr, plr, eps, None, max_grad_norm)
         self.clip_param = clip_param
         self.ppo_epoch = ppo_epoch
         self.num_mini_batch = num_mini_batch
-
-        self.value_loss_coef = value_loss_coef
-        self.entropy_coef = entropy_coef
-
-        self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
-
-        self.optimizer = optim.Adam(actor_critic.parameters(), lr=lr, eps=eps)
 
     def update(self, rollouts):
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
@@ -76,12 +61,7 @@ class PPO():
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-                self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss -
-                 dist_entropy * self.entropy_coef).backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
-                                         self.max_grad_norm)
-                self.optimizer.step()
+                self.update_actor_critic(action_loss, value_loss, dist_entropy)
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()

@@ -28,7 +28,9 @@ class A2C_ACKTR():
 
         self.max_grad_norm = max_grad_norm
 
-        optim_fn = lambda _m, _lr: KFACOptimizer(_m) if acktr else optim.RMSprop(_m.parameters(), _lr, eps=eps, alpha=alpha)
+        optim_fn = lambda _m, _lr: KFACOptimizer(_m) if acktr \
+            else optim.RMSprop(_m.parameters(), _lr, eps=eps, alpha=alpha) \
+            if alpha else optim.Adam(_m.parameters(), _lr, eps=eps)
 
         if vf_coef:
             self.actor_critic_optimizer = optim_fn(self.actor_critic, plr)
@@ -72,6 +74,15 @@ class A2C_ACKTR():
             nn.utils.clip_grad_norm_(model.parameters(), self.max_grad_norm)
         opt.step()
 
+    def update_actor_critic(self, action_loss, value_loss, dist_entropy):
+        if self.shared_model:
+            self.update_model(self.actor_critic_optimizer,
+                              action_loss - self.entropy_coef * dist_entropy + self.vf_coef * value_loss,
+                              self.actor_critic)
+        else:
+            self.update_model(self.actor_optimizer, action_loss - self.entropy_coef * dist_entropy, self.actor)
+            self.update_model(self.critic_optimizer, value_loss, self.critic)
+
     def update(self, rollouts):
 
         action_shape = rollouts.actions.size()[-1]
@@ -96,13 +107,7 @@ class A2C_ACKTR():
                 ((self.shared_model and self.actor_critic_optimizer.steps % self.actor_critic_optimizer.Ts) or
                  (not self.shared_model and self.actor_optimizer.steps % self.actor_optimizer.Ts == 0)):
             self.kfac_update(action_log_probs, values)
-
-        if self.shared_model:
-            self.update_model(self.actor_critic_optimizer,
-                              action_loss - self.entropy_coef * dist_entropy + self.vf_coef*value_loss,
-                              self.actor_critic)
         else:
-            self.update_model(self.actor_optimizer, action_loss - self.entropy_coef * dist_entropy, self.actor)
-            self.update_model(self.critic_optimizer, value_loss, self.critic)
+            self.update_actor_critic(action_loss, value_loss, dist_entropy)
 
         return value_loss.item(), action_loss.item(), dist_entropy.item()

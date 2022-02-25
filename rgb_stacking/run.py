@@ -67,13 +67,14 @@ def main(argv: Sequence[str]) -> None:
 
     elif args.algo == 'ppo':
         agent = algo.PPO(
-            actor_critic,
-            args.clip_param,
-            args.ppo_epoch,
-            args.num_mini_batch,
-            args.value_loss_coef,
-            args.entropy_coef,
-            lr=args.lr,
+            actor_critic=actor_critic,
+            clip_param=args.clip_param,
+            ppo_epoch=args.ppo_epoch,
+            num_mini_batch=args.num_mini_batch,
+            value_loss_coef=args.value_loss_coef,
+            entropy_coef=args.entropy_coef,
+            vlr=args.vlr,
+            plr=args.plr,
             eps=args.eps,
             max_grad_norm=args.max_grad_norm)
 
