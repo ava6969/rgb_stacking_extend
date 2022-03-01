@@ -41,14 +41,17 @@ def main(argv: Sequence[str]) -> None:
     )
 
     # rank = proc_id()
-    rank = 0
+    # rank = 0
 
     args = get_args(FLAGS.config_path)
     # msg('Launched Successfully')
 
-    args.seed += 10000 * rank
+    # args.seed += 10000 * rank
 
-    writer = SummaryWriter(filename_suffix="rank{}".format(rank))
+
+    # writer = SummaryWriter(filename_suffix="rank{}".format(rank))
+
+    writer = SummaryWriter()
 
     torch.manual_seed(args.seed)
 
@@ -78,8 +81,8 @@ def main(argv: Sequence[str]) -> None:
     actor_critic.to(device)
     # sync_params(actor_critic)
 
-    if rank == 0:
-        print(actor_critic)
+    # if rank == 0:
+    print(actor_critic)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
@@ -204,18 +207,18 @@ def main(argv: Sequence[str]) -> None:
             end = time.time()
             fps = int(total_num_steps / (end - start))
 
-            if rank == 0:
-                print(
-                    "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
-                    "min/max reward {:.1f}/{:.1f}\n "
-                        .format(j, total_num_steps,
-                                fps,
-                                len(episode_rewards), np.mean(episode_rewards),
-                                np.median(episode_rewards), np.min(episode_rewards),
-                                np.max(episode_rewards), dist_entropy, value_loss,
-                                action_loss))
+            # if rank == 0:
+            print(
+                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
+                "min/max reward {:.1f}/{:.1f}\n "
+                    .format(j, total_num_steps,
+                            fps,
+                            len(episode_rewards), np.mean(episode_rewards),
+                            np.median(episode_rewards), np.min(episode_rewards),
+                            np.max(episode_rewards), dist_entropy, value_loss,
+                            action_loss))
 
-            writer.add_scalar('Reward/Mean'.format(), float(np.mean(episode_rewards)), total_num_steps)
+            writer.add_scalar('Reward/Mean', float(np.mean(episode_rewards)), total_num_steps)
             writer.add_scalar('Reward/Min', float(np.min(episode_rewards)), total_num_steps)
             writer.add_scalar('Reward/Median', float(np.median(episode_rewards)), total_num_steps)
             writer.add_scalar('Reward/Max', float(np.max(episode_rewards)), total_num_steps)
