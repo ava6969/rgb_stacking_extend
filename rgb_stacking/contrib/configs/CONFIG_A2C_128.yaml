@@ -14,7 +14,7 @@ value_loss_coef: null
 max_grad_norm: 0.5
 seed: 1
 cuda_deterministic: False
-num_steps: 10
+num_steps: 256
 log_interval: 100
 save_interval: 100
 num_env_steps: 1.0e+8
