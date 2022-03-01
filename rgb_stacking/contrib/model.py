@@ -323,4 +323,8 @@ def build_feature_extract(obs_space: gym.Space, option: PolicyOption, policy: bo
     else:
         in_ = np.ravel(obs_space.shape)[0]
         out_size = option.feature_extract['flatten_out']
-        return init_(torch.nn.Linear(in_, out_size)), out_size
+        model = torch.nn.Sequential( init_(torch.nn.Linear(in_, out_size)),
+                                     torch.nn.ReLU(),
+                                     init_(torch.nn.Linear(out_size, out_size)))
+
+        return model, out_size
