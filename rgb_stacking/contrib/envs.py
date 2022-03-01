@@ -65,7 +65,7 @@ def make_vec_envs(env_name,
     ]
 
     if len(envs) > 1:
-        envs = SubprocVecEnv(envs)
+        envs = SubprocVecEnv(envs, "spawn")
     else:
         envs = DummyVecEnv(envs)
 
