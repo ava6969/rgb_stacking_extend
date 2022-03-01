@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from a2c_ppo_acktr.a2c_ppo_acktr.algo.kfac import KFACOptimizer
+from rgb_stacking.contrib.mpi_pytorch import mpi_avg_grads
 
 
 class A2C_ACKTR():
@@ -72,6 +73,7 @@ class A2C_ACKTR():
         loss.backward()
         if not self.acktr:
             nn.utils.clip_grad_norm_(model.parameters(), self.max_grad_norm)
+        mpi_avg_grads(model)
         opt.step()
 
     def update_actor_critic(self, action_loss, value_loss, dist_entropy):

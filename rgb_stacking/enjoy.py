@@ -1,11 +1,9 @@
 import argparse
 import os
 # workaround to unpickle olf model files
-import sys
 
 import torch
-import cv2
-from a2c_ppo_acktr.a2c_ppo_acktr.envs import make_vec_envs
+from rgb_stacking.contrib.envs import make_vec_envs
 from a2c_ppo_acktr.a2c_ppo_acktr.utils import get_render_func, get_vec_normalize
 
 # sys.path.append('a2c_ppo_acktr')

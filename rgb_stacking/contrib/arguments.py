@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import torch, yaml
 from typing import Dict
 
+from rgb_stacking.contrib.mpi_tools import num_procs
+
 
 @dataclass
 class PolicyOption:
@@ -70,11 +72,11 @@ def get_args(path):
         else:
             args.__setattr__(key, parse_model(node[key]))
 
+    args.num_env_steps = args.num_env_steps / num_procs()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
     if not args.model.horizon_length:
-        args.model.horizon_length  = args.num_steps
-
+        args.model.horizon_length = args.num_steps
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
     if args.recurrent_policy is not None:

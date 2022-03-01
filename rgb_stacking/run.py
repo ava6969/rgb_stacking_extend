@@ -1,22 +1,24 @@
 
 import os
+
+from rgb_stacking.contrib.mpi_pytorch import sync_params
+from rgb_stacking.contrib.mpi_tools import proc_id, msg
+
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
-import time
 from collections import deque
 from typing import Sequence
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import torch
-
+import time
 from a2c_ppo_acktr.a2c_ppo_acktr import utils
-import a2c_ppo_acktr.a2c_ppo_acktr.algo as shared_algo
 from rgb_stacking.contrib import algo
 from rgb_stacking.contrib.arguments import get_args
-from a2c_ppo_acktr.a2c_ppo_acktr.envs import make_vec_envs
+from rgb_stacking.contrib.envs import make_vec_envs
 from rgb_stacking.contrib.model import Policy
 from rgb_stacking.contrib.storage import RolloutStorage
 from a2c_ppo_acktr.evaluation import evaluate
-
+import logging
 from absl import app
 from absl import flags
 from absl.flags import FLAGS
@@ -29,9 +31,26 @@ flags.DEFINE_string('config_path',
 
 def main(argv: Sequence[str]) -> None:
 
+    logging.getLogger("imported_module").setLevel(logging.ERROR)
+
+    env = os.environ.copy()
+    env.update(
+        MKL_NUM_THREADS="1",
+        OMP_NUM_THREADS="1",
+        IN_MPI="1"
+    )
+
+    rank = proc_id()
+
     args = get_args(FLAGS.config_path)
-    writer = SummaryWriter()
+    msg('Launched Successfully')
+
+    args.seed += 10000 * rank
+
+    writer = SummaryWriter(filename_suffix="rank{}".format(rank))
+
     torch.manual_seed(args.seed)
+
     torch.cuda.manual_seed_all(args.seed)
 
     if args.cuda and torch.cuda.is_available() and args.cuda_deterministic:
@@ -44,15 +63,22 @@ def main(argv: Sequence[str]) -> None:
     utils.cleanup_log_dir(eval_log_dir)
 
     torch.set_num_threads(1)
+
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    envs = make_vec_envs(args.env_name, args.seed, args.num_processes,
-                         args.gamma, args.log_dir, device, False)
+    envs = make_vec_envs(args.env_name,
+                         args.seed,
+                         args.num_processes,
+                         args.gamma,
+                         args.log_dir,
+                         device, False)
 
     actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
-
     actor_critic.to(device)
-    print(actor_critic)
+    sync_params(actor_critic)
+
+    if rank == 0:
+        print(actor_critic)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
@@ -176,17 +202,19 @@ def main(argv: Sequence[str]) -> None:
             total_num_steps = (j + 1) * args.num_processes * args.num_steps
             end = time.time()
             fps = int(total_num_steps / (end - start))
-            print(
-                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
-                "min/max reward {:.1f}/{:.1f}\n "
-                    .format(j, total_num_steps,
-                            fps,
-                            len(episode_rewards), np.mean(episode_rewards),
-                            np.median(episode_rewards), np.min(episode_rewards),
-                            np.max(episode_rewards), dist_entropy, value_loss,
-                            action_loss))
 
-            writer.add_scalar('Reward/Mean', float(np.mean(episode_rewards)), total_num_steps)
+            if rank == 0:
+                print(
+                    "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
+                    "min/max reward {:.1f}/{:.1f}\n "
+                        .format(j, total_num_steps,
+                                fps,
+                                len(episode_rewards), np.mean(episode_rewards),
+                                np.median(episode_rewards), np.min(episode_rewards),
+                                np.max(episode_rewards), dist_entropy, value_loss,
+                                action_loss))
+
+            writer.add_scalar('Reward/Mean'.format(), float(np.mean(episode_rewards)), total_num_steps)
             writer.add_scalar('Reward/Min', float(np.min(episode_rewards)), total_num_steps)
             writer.add_scalar('Reward/Median', float(np.median(episode_rewards)), total_num_steps)
             writer.add_scalar('Reward/Max', float(np.max(episode_rewards)), total_num_steps)
