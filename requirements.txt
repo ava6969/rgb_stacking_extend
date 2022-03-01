@@ -6,6 +6,7 @@ dm-reverb-nightly
 opencv-python >= 3.4.0
 typing-extensions >= 3.7.4
 
+mpi4py
 numpy
 gym
 torch
