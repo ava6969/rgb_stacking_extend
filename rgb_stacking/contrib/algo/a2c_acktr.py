@@ -73,7 +73,7 @@ class A2C_ACKTR():
         loss.backward()
         if not self.acktr:
             nn.utils.clip_grad_norm_(model.parameters(), self.max_grad_norm)
-        mpi_avg_grads(model)
+        # mpi_avg_grads(model)
         opt.step()
 
     def update_actor_critic(self, action_loss, value_loss, dist_entropy):
