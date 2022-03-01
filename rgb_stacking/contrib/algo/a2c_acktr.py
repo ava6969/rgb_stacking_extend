@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from a2c_ppo_acktr.a2c_ppo_acktr.algo.kfac import KFACOptimizer
-from rgb_stacking.contrib.mpi_pytorch import mpi_avg_grads
+# from rgb_stacking.contrib.mpi_pytorch import mpi_avg_grads
 
 
 class A2C_ACKTR():

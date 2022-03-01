@@ -1,8 +1,8 @@
 
 import os
 
-from rgb_stacking.contrib.mpi_pytorch import sync_params
-from rgb_stacking.contrib.mpi_tools import proc_id, msg
+# from rgb_stacking.contrib.mpi_pytorch import sync_params
+# from rgb_stacking.contrib.mpi_tools import proc_id, msg
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 from collections import deque
@@ -40,10 +40,11 @@ def main(argv: Sequence[str]) -> None:
         IN_MPI="1"
     )
 
-    rank = proc_id()
+    # rank = proc_id()
+    rank = 0
 
     args = get_args(FLAGS.config_path)
-    msg('Launched Successfully')
+    # msg('Launched Successfully')
 
     args.seed += 10000 * rank
 
@@ -75,7 +76,7 @@ def main(argv: Sequence[str]) -> None:
 
     actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
     actor_critic.to(device)
-    sync_params(actor_critic)
+    # sync_params(actor_critic)
 
     if rank == 0:
         print(actor_critic)
