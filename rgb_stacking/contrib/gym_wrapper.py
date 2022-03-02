@@ -71,7 +71,14 @@ class GymWrapper(gym.Env):
             else {k: np.ravel(v) for k, v in obs.items()}
 
     def reset(self):
-        return self.observation(self.env.reset().observation)
+        success_obs = None
+        while not success_obs:
+            try:
+                success_obs = self.env.reset()
+            except Exception:
+                success_obs = None
+
+        return self.observation(success_obs.observation)
 
     def render(self, mode="human"):
         cam = self.env.physics.render(camera_id='main_camera', width=480, height=240)
