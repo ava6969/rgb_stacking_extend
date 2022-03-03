@@ -149,8 +149,8 @@ def main(argv: Sequence[str]) -> None:
                     agent.critic_optimizer, j, num_updates,
                     agent.critic_optimizer.lr if args.algo == "acktr" else args.vlr)
 
-                writer.add_scalar('LearningRate/Critic', args.vlr, j)
-                writer.add_scalar('LearningRate/Actor', args.plr, j)
+                writer.add_scalar('LearningRate/Critic', agent.critic_optimizer.lr, j)
+                writer.add_scalar('LearningRate/Actor',  agent.actor_optimizer.lr, j)
 
         for step in range(args.num_steps):
             # Sample actions
