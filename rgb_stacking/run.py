@@ -137,20 +137,20 @@ def main(argv: Sequence[str]) -> None:
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
             if agent.shared_model:
-                utils.update_linear_schedule(
+                p_lr_ = utils.update_linear_schedule(
                     agent.actor_critic_optimizer, j, num_updates,
                     agent.actor_critic_optimizer.lr if args.algo == "acktr" else args.plr)
-                writer.add_scalar('LearningRate/ActorCritic', agent.actor_critic_optimizer.plr, j)
+                writer.add_scalar('LearningRate/ActorCritic', p_lr_, j)
             else:
-                utils.update_linear_schedule(
+                p_lr_ = utils.update_linear_schedule(
                     agent.actor_optimizer, j, num_updates,
                     agent.actor_optimizer.lr if args.algo == "acktr" else args.plr)
-                utils.update_linear_schedule(
+                v_lr_ = utils.update_linear_schedule(
                     agent.critic_optimizer, j, num_updates,
                     agent.critic_optimizer.lr if args.algo == "acktr" else args.vlr)
 
-                writer.add_scalar('LearningRate/Critic', agent.critic_optimizer.lr, j)
-                writer.add_scalar('LearningRate/Actor',  agent.actor_optimizer.lr, j)
+                writer.add_scalar('LearningRate/Critic', v_lr_, j)
+                writer.add_scalar('LearningRate/Actor',  p_lr_, j)
 
         for step in range(args.num_steps):
             # Sample actions
