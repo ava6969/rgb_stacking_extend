@@ -58,13 +58,12 @@ def make_vec_envs(env_name,
                   device,
                   allow_early_resets,
                   num_frame_stack=None):
-
     envs = [
         make_env(env_name, seed, i, log_dir, allow_early_resets)
         for i in range(num_processes)
     ]
 
-    if len(envs) > 1:
+    if num_processes > 1:
         envs = SubprocVecEnv(envs, "spawn")
     else:
         envs = DummyVecEnv(envs)
