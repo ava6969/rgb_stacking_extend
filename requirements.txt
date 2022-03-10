@@ -3,8 +3,8 @@ dm-robotics-moma
 dm-robotics-manipulation
 tensorflow
 dm-reverb-nightly
-opencv-python >= 3.4.0
-typing-extensions >= 3.7.4
+opencv-python
+typing-extensions
 
 mpi4py
 numpy
