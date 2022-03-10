@@ -116,9 +116,9 @@ class GymWrapper(gym.Env):
         self.discrete_action_bin = None
         self.flatten_order = []
 
-        if obs_preprocess == ObservationPreprocess.FLATTEN:
+        if obs_preprocess.value == ObservationPreprocess.FLATTEN.value:
             self.make_box_obs_space(obs_spec)
-        elif obs_preprocess == ObservationPreprocess.RAW_DICT:
+        elif obs_preprocess.value == ObservationPreprocess.RAW_DICT.value:
             self.make_dict_obs_space(obs_spec)
         else:
             self.make_actor_based_obs_space(obs_spec)
@@ -129,8 +129,8 @@ class GymWrapper(gym.Env):
             self.make_continuous_action_space()
 
     def observation(self, obs):
-        return flatten_dict(obs, self.flatten_order) if self.obs_preprocess == ObservationPreprocess.FLATTEN \
-            else {k: np.ravel(v) for k, v in obs.items()} if self.obs_preprocess == ObservationPreprocess.RAW_DICT \
+        return flatten_dict(obs, self.flatten_order) if self.obs_preprocess.value == ObservationPreprocess.FLATTEN.value \
+            else {k: np.ravel(v) for k, v in obs.items()} if self.obs_preprocess.value == ObservationPreprocess.RAW_DICT.value \
             else actor_based_observation(obs)
 
     def reset(self):

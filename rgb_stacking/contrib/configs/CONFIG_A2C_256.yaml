@@ -1,5 +1,5 @@
 env_name: StackRGBTestTriplet-v0
-num_processes: 128
+num_processes: 256
 no_cuda: False
 algo: a2c
 plr: 7.0e-4
