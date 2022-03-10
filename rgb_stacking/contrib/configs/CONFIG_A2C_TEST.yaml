@@ -1,4 +1,4 @@
-env_name: StackRGBTestTriplet-v1
+env_name: StackRGBTestTriplet-v0
 num_processes: 12
 no_cuda: True
 algo: a2c
