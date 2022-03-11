@@ -272,8 +272,8 @@ class SelfAttentionBlock(nn.Module):
 
 
 class ResidualSelfAttentionBlock(nn.Module):
-    def __init__(self, input_size, heads, n_embed, layer_norm=False, post_sa_layer_norm=False, qk_w=0.125, v_w=0.125,
-                 post_w=0.125, max_pool=True):
+    def __init__(self, input_size, heads, n_embed, layer_norm=False, post_sa_layer_norm=False,
+                 qk_w=0.125, v_w=0.125, post_w=0.125, max_pool=True):
         super().__init__()
         self.max_pool = max_pool
         self._self_attn = SelfAttentionBlock(input_size, heads, n_embed, layer_norm, qk_w, v_w)

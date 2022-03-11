@@ -3,6 +3,7 @@ import os
 
 # from rgb_stacking.contrib.mpi_pytorch import sync_params
 # from rgb_stacking.contrib.mpi_tools import proc_id, msg
+import mpi4torch
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 from collections import deque
@@ -12,7 +13,7 @@ import numpy as np
 import torch
 import time
 from a2c_ppo_acktr.a2c_ppo_acktr import utils
-from rgb_stacking.contrib import algo
+from rgb_stacking.contrib import algo, mpi_tools
 from rgb_stacking.contrib.arguments import get_args
 from rgb_stacking.contrib.envs import make_vec_envs
 from rgb_stacking.contrib.model import Policy
@@ -40,35 +41,23 @@ def main(argv: Sequence[str]) -> None:
         IN_MPI="1"
     )
 
-    # rank = proc_id()
-    # rank = 0
-
     args = get_args(FLAGS.config_path)
-    # msg('Launched Successfully')
-
-    # args.seed += 10000 * rank
-
-
-    # writer = SummaryWriter(filename_suffix="rank{}".format(rank))
-
-    writer = SummaryWriter()
 
     torch.manual_seed(args.seed)
-
     torch.cuda.manual_seed_all(args.seed)
-
-    if args.cuda and torch.cuda.is_available() and args.cuda_deterministic:
+    if args.device != 'cpu' and args.cuda_deterministic:
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
 
+
+    writer = SummaryWriter()
     log_dir = os.path.expanduser(args.log_dir)
     eval_log_dir = log_dir + "_eval"
     utils.cleanup_log_dir(log_dir)
     utils.cleanup_log_dir(eval_log_dir)
 
     torch.set_num_threads(1)
-
-    device = torch.device("cuda" if args.cuda else "cpu")
+    device = torch.device(args.device)
 
     envs = make_vec_envs(args.env_name,
                          args.seed,
@@ -79,9 +68,7 @@ def main(argv: Sequence[str]) -> None:
 
     actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
     actor_critic.to(device)
-    # sync_params(actor_critic)
 
-    # if rank == 0:
     print(actor_critic)
 
     if args.algo == 'a2c':

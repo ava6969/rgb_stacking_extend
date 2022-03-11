@@ -35,7 +35,7 @@ class Arg:
     max_grad_norm: float = 0.5
     seed: int = 1
     cuda_deterministic: bool = False
-    cuda: bool = False
+    device: str = 'cuda:0'
     num_processes: int = 16
     num_steps: int = 5
     ppo_epoch: int = 4
@@ -71,9 +71,6 @@ def get_args(path):
             args.__setattr__(key, node[key])
         else:
             args.__setattr__(key, parse_model(node[key]))
-
-    # args.num_env_steps = args.num_env_steps / num_procs()
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
 
     if not args.model.horizon_length:
         args.model.horizon_length = args.num_steps
