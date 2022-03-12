@@ -1,5 +1,5 @@
 env_name: StackRGBTrain-v1
-num_processes: 128
+num_processes: 64
 device: cuda:1
 algo: a2c
 plr: 7.0e-4
