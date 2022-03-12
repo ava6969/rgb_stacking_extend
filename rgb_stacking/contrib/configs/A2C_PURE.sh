@@ -17,7 +17,7 @@
 #Job membory requirements in MB=m (default), GB=g, or TB=t
 #SBATCH --mem=300g
 
-#SBATCH --gres=gpu:p4:1
+#SBATCH --gres=gpu:p4:2
 export OPENBLAS_NUM_THREADS=1
 conda activate shapes
 cd /home/ava6969/rgb_stacking_extend
