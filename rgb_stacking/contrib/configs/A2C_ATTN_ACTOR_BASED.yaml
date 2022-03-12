@@ -1,7 +1,7 @@
-env_name: StackRGBTrain-v1
+env_name: StackRGBTrain-v3
 num_processes: 16
 device: cuda:0
-algo: ppo
+algo: a2c
 plr: 7.0e-4
 vlr: 7.0e-4
 alpha: 0.99
@@ -29,28 +29,18 @@ model:
   hidden_size: 512
 
   feature_extract:
+    embed_out: 256
     vision_out: 512
-    flatten_out: 512
+    flatten_out: 1024
     act_fn: relu
+    heads: 4
+    post: attn
+    attn_embed_dim: 256
+    max_pool_out: False
 
-  policy_keys: &1 ['action/environment',
-  'gripper/grasp',
-  'gripper/joints/angle',
-  'gripper/joints/velocity',
-  'rgb30_blue/abs_pose',
-  'rgb30_blue/to_pinch',
-  'rgb30_green/abs_pose',
-  'rgb30_green/to_pinch',
-  'rgb30_red/abs_pose',
-  'rgb30_red/to_pinch',
-  'sawyer/joints/angle',
-  'sawyer/joints/torque',
-  'sawyer/joints/velocity',
-  'sawyer/pinch/pose',
-  'sawyer/tcp/pose',
-  'sawyer/tcp/velocity',
-  'wrist/force',
-  'wrist/torque']
+  policy_keys: &1 ['boxes',
+                   'robot0:joints',
+                   'robot0:others']
 
   value_keys: *1
 

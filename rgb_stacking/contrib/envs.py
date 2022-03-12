@@ -1,5 +1,6 @@
 import os
 from collections import OrderedDict
+from typing import Union, Dict
 
 import gym
 import numpy as np
@@ -14,6 +15,7 @@ from stable_baselines3.common.atari_wrappers import (ClipRewardEnv,
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import (DummyVecEnv, SubprocVecEnv,
                                               VecEnvWrapper)
+from stable_baselines3.common.vec_env.base_vec_env import VecEnvStepReturn
 from stable_baselines3.common.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
 
@@ -159,16 +161,20 @@ class VecNormalize(VecNormalize_):
         super(VecNormalize, self).__init__(*args, **kwargs)
         self.training = True
 
-    def _obfilt(self, obs, update=True):
-        if self.obs_rms:
-            if self.training and update:
-                self.obs_rms.update(obs)
-            obs = np.clip((obs - self.obs_rms.mean) /
-                          np.sqrt(self.obs_rms.var + self.epsilon),
-                          -self.clip_obs, self.clip_obs)
-            return obs
-        else:
-            return obs
+    def revert_action_reward(self, obs_dict: Dict):
+        original_obs = super().get_original_obs()
+        obs_dict['past_reward'] = original_obs['past_reward']
+        obs_dict['past_action'] = original_obs['past_action']
+        return obs_dict
+
+    def reset(self) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+        obs = super().reset()
+        return self.revert_action_reward(obs)
+
+    def step_wait(self) -> VecEnvStepReturn:
+        obs, rew, done, info = super(VecNormalize, self).step_wait()
+        step_ret_ = self.revert_action_reward(obs), rew, done, info
+        return step_ret_
 
     def train(self):
         self.training = True

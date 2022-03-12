@@ -24,69 +24,77 @@ NUM_OF_JOINTS_ON_ARMS = 7
 
 
 def actor_based_observation(obs):
-    obs_dict = {'robot0:joint' + str(i):
-                    np.concatenate([np.ravel(obs['sawyer/joints/angle'][:, i]),
+    joint_sensor = [np.concatenate([np.ravel(obs['sawyer/joints/angle'][:, i]),
                                     np.ravel(obs['sawyer/joints/torque'][:, i]),
                                     np.ravel(obs['sawyer/joints/velocity'][:, i]),
                                     np.ravel(obs['action/environment'][:, i])])
-                for i in range(NUM_OF_JOINTS_ON_ARMS)}
+                    for i in range(NUM_OF_JOINTS_ON_ARMS)]
 
-    obs_dict['robot0:wrist'] = np.concatenate([np.ravel(obs['wrist/force']),
-                                               np.ravel(obs['wrist/torque']),
-                                               np.ravel(obs['sawyer/tcp/pose']),
-                                               np.ravel(obs['sawyer/tcp/velocity'])])
-    obs_dict['robot0:pinch'] = np.ravel(obs['sawyer/pinch/pose'])
-    obs_dict['robot0:gripper'] = np.ravel(np.array([obs['gripper/grasp'],
-                                                    obs['gripper/joints/angle'],
-                                                    obs['gripper/joints/velocity']]))
-    for color in ['red', 'blue', 'green']:
-        obs_dict['{}:pos_relative_to_pinch+pose'.format(color)] = np.ravel(np.array(
-            [obs['rgb30_{}/abs_pose'.format(color)], obs['rgb30_{}/to_pinch'.format(color)]]))
+    obs_dict = dict({'robot0:joints': np.concatenate(joint_sensor)})
+
+    obs_dict['robot0:others'] = np.concatenate([np.ravel(obs['wrist/force']),
+                                                np.ravel(obs['wrist/torque']),
+                                                np.ravel(obs['sawyer/tcp/pose']),
+                                                np.ravel(obs['sawyer/tcp/velocity']),
+                                                np.ravel(obs['sawyer/pinch/pose']),
+                                                np.ravel(np.array([obs['gripper/grasp'],
+                                                                   obs['gripper/joints/angle'],
+                                                                   obs['gripper/joints/velocity']]))
+                                                ])
+
+    boxes = [np.ravel(np.array([obs['rgb30_{}/abs_pose'.format(color)],
+                                obs['rgb30_{}/to_pinch'.format(color)]])) for color in ['red',
+                                                                                        'blue',
+                                                                                        'green']]
+    obs_dict['boxes'] = np.concatenate(boxes)
+
     return obs_dict
 
 
+def box_space(n):
+    return gym.spaces.Box(-np.inf, np.inf, [n])
+
+
 class GymWrapper(gym.Env):
+    ACTION_BIN_SIZE = 11
+
+    def make_space(self, obs_spec, shape_map):
+        shape_map['past_reward'] = gym.spaces.Box(-np.inf, np.inf, [1])
+        shape_map['past_action'] = gym.spaces.Box(np.array([0, 0, 0, 0, 0]),
+                                                  np.array([GymWrapper.ACTION_BIN_SIZE - 1]*4 + [1]))
+        self.observation_space = gym.spaces.Dict(shape_map)
 
     def make_box_obs_space(self, obs_spec):
         sz = 0
         for k, v in obs_spec.items():
             self.flatten_order.append(k)
             sz += np.prod(v.shape)
-        self.observation_space = gym.spaces.Box(-np.inf, np.inf, [sz])
+        self.make_space(obs_spec, dict(observation=gym.spaces.Box(-np.inf, np.inf, [sz])))
 
     def make_dict_obs_space(self, obs_spec):
         shape_map = dict()
         for k, v in obs_spec.items():
             shape_map[k] = gym.spaces.Box(-np.inf, np.inf, [np.prod(v.shape)])
-        self.observation_space = gym.spaces.Dict(shape_map)
+        self.make_space(obs_spec, shape_map)
 
     def make_actor_based_obs_space(self, obs_spec):
-        space_fn = lambda n: gym.spaces.Box(-np.inf, np.inf, [n])
         flatten = lambda k: np.prod(obs_spec[k].shape)
 
         flatten_arm_joint_size = np.sum([flatten('sawyer/joints/angle'),
                                          flatten('sawyer/joints/torque'),
                                          flatten('sawyer/joints/velocity'),
                                          flatten('action/environment')])
-        size_per_arm_joint = flatten_arm_joint_size // NUM_OF_JOINTS_ON_ARMS
 
-        shape_map = {'robot0:joint' + str(i): space_fn(size_per_arm_joint)
-                     for i in range(NUM_OF_JOINTS_ON_ARMS)}
-
-        shape_map['robot0:wrist'] = space_fn(flatten('wrist/force') + flatten('wrist/torque') +
-                                             flatten('sawyer/tcp/pose') + flatten('sawyer/tcp/velocity'))
-
-        shape_map['robot0:pinch'] = space_fn(flatten('sawyer/pinch/pose'))
-        shape_map['robot0:gripper'] = space_fn(flatten('gripper/grasp') +
+        shape_map = dict({'robot0:joints': box_space(flatten_arm_joint_size - 2)})
+        shape_map['robot0:others'] = box_space(flatten('wrist/force') + flatten('wrist/torque') +
+                                               flatten('sawyer/tcp/pose') + flatten('sawyer/tcp/velocity')
+                                               + flatten('sawyer/pinch/pose') + flatten('gripper/grasp') +
                                                flatten('gripper/joints/angle') +
                                                flatten('gripper/joints/velocity'))
 
         rgb_size = np.prod(obs_spec['rgb30_blue/abs_pose'].shape) + np.prod(obs_spec['rgb30_blue/to_pinch'].shape)
-        shape_map['red:pos_relative_to_pinch+pose'] = space_fn(rgb_size)
-        shape_map['blue:pos_relative_to_pinch+pose'] = space_fn(rgb_size)
-        shape_map['green:pos_relative_to_pinch+pose'] = space_fn(rgb_size)
-
-        self.observation_space = gym.spaces.Dict(shape_map)
+        shape_map['boxes'] = box_space(rgb_size * 3)
+        self.make_space(obs_spec, shape_map)
 
     def make_discrete_action_space(self, num_discrete_action_bin):
         assert num_discrete_action_bin % 2 == 1, 'number of discrete action bin must be odd'
@@ -107,6 +115,7 @@ class GymWrapper(gym.Env):
                  obs_preprocess=ObservationPreprocess.FLATTEN,
                  num_discrete_action_bin: int = None):
 
+        GymWrapper.ACTION_BIN_SIZE = num_discrete_action_bin
         self.env = environment.rgb_stacking(object_triplet=object_triplet)
         self.obs_preprocess = obs_preprocess
 
@@ -115,6 +124,8 @@ class GymWrapper(gym.Env):
 
         self.discrete_action_bin = None
         self.flatten_order = []
+        self.past_action = [num_discrete_action_bin // 2 for _ in range(self.action_spec.shape[0] - 1)] + [0]
+        self.past_reward = 0
 
         if obs_preprocess.value == ObservationPreprocess.FLATTEN.value:
             self.make_box_obs_space(obs_spec)
@@ -129,9 +140,14 @@ class GymWrapper(gym.Env):
             self.make_continuous_action_space()
 
     def observation(self, obs):
-        return flatten_dict(obs, self.flatten_order) if self.obs_preprocess.value == ObservationPreprocess.FLATTEN.value \
-            else {k: np.ravel(v) for k, v in obs.items()} if self.obs_preprocess.value == ObservationPreprocess.RAW_DICT.value \
+        base = {'observation': flatten_dict(obs, self.flatten_order)} \
+            if self.obs_preprocess.value == ObservationPreprocess.FLATTEN.value \
+            else {k: np.ravel(v) for k, v in
+                  obs.items()} if self.obs_preprocess.value == ObservationPreprocess.RAW_DICT.value \
             else actor_based_observation(obs)
+        base['past_reward'] = np.array([self.past_reward], float)
+        base['past_action'] = np.array(self.past_action, int)
+        return base
 
     def reset(self):
         success_obs = None
@@ -149,16 +165,18 @@ class GymWrapper(gym.Env):
         cv2.waitKey(1)
 
     def step(self, action: numpy.ndarray):
-
-        action = np.array([bins[action_index]
-                           for bins, action_index in
-                           zip(self.discrete_action_bin, action)]) if self.discrete_action_bin \
+        _clone_action = action.copy()
+        np_action = np.array([bins[action_index]
+                              for bins, action_index in
+                              zip(self.discrete_action_bin, action)]) if self.discrete_action_bin \
             else np.array(
             [norm_action * scale_factor for scale_factor, norm_action in zip(self.action_spec.maximum, action)])
 
-        time_step = self.env.step(action)
-
-        return self.observation(time_step.observation), time_step.reward, time_step.last(), {}
+        time_step = self.env.step(np_action)
+        x = self.observation(time_step.observation)
+        self.past_action = _clone_action
+        self.past_reward = time_step.reward
+        return x, time_step.reward, time_step.last(), {}
 
     def close(self):
         self.env.close()
@@ -175,6 +193,11 @@ def main(argv: Sequence[str]) -> None:
 
     reset_obs = env.reset()
     print(tabulate.tabulate([[k, v] for k, v in reset_obs.items()]))
+
+    action = env.action_space.sample()
+    print('take random action', action)
+    print(tabulate.tabulate([[k, v] for k, v in env.step(action)[0].items()]))
+    # print(env.step(action))
 
     action = env.action_space.sample()
     print('take random action', action)

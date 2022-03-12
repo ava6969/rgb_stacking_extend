@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import time
 from a2c_ppo_acktr.a2c_ppo_acktr import utils
-from rgb_stacking.contrib import algo, mpi_tools
+from rgb_stacking.contrib import algo
 from rgb_stacking.contrib.arguments import get_args
 from rgb_stacking.contrib.envs import make_vec_envs
 from rgb_stacking.contrib.model import Policy

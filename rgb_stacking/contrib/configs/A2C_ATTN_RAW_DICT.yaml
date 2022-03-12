@@ -1,7 +1,7 @@
-env_name: StackRGBTrain-v1
+env_name: StackRGBTrain-v2
 num_processes: 16
 device: cuda:0
-algo: ppo
+algo: a2c
 plr: 7.0e-4
 vlr: 7.0e-4
 alpha: 0.99
@@ -29,9 +29,14 @@ model:
   hidden_size: 512
 
   feature_extract:
+    embed_out: 32
     vision_out: 512
-    flatten_out: 512
+    flatten_out: 1024
     act_fn: relu
+    heads: 4
+    post: attn
+    attn_embed_dim: 128
+    max_pool_out: False
 
   policy_keys: &1 ['action/environment',
   'gripper/grasp',
