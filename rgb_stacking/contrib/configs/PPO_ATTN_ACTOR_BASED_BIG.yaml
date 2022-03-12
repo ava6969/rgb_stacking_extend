@@ -1,5 +1,5 @@
 env_name: StackRGBTrain-v3
-num_processes: 256
+num_processes: 128
 device: cuda:1
 algo: ppo
 plr: 7.0e-4
@@ -23,7 +23,7 @@ save_dir: './trained_models_big/'
 use_proper_time_limits: False
 eval_interval: null
 use_linear_lr_decay: True
-num_mini_batch: 128
+num_mini_batch: 64
 ppo_epoch: 3
 
 model:
