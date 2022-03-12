@@ -1,6 +1,6 @@
 env_name: StackRGBTrainImage-v3
 num_processes: 64
-device: cuda
+device: cuda:1
 algo: ppo
 plr: 7.0e-4
 vlr: 7.0e-4
