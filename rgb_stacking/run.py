@@ -1,10 +1,6 @@
 
 import os
 
-# from rgb_stacking.contrib.mpi_pytorch import sync_params
-# from rgb_stacking.contrib.mpi_tools import proc_id, msg
-import mpi4torch
-
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 from collections import deque
 from typing import Sequence
