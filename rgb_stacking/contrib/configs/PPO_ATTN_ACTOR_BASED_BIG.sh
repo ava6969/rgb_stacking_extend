@@ -1,6 +1,6 @@
 #!/bin/bash -l
 # NOTE the -l flag!
-#SBATCH -J PPO_ATTN_ACTOR_BASED
+#SBATCH -J PPO_ATTN_ACTOR_BASED_BIG
 #SBATCH --error %x_%j.err
 #SBATCH --mail-user=ava6969@rit.edu
 #SBATCH --mail-type=ALL
@@ -17,7 +17,7 @@
 #Job membory requirements in MB=m (default), GB=g, or TB=t
 #SBATCH --mem=300g
 
-#SBATCH --gres=gpu:v100:1
+#SBATCH --gres=gpu:2
 export OPENBLAS_NUM_THREADS=1
 conda activate shapes
 cd /home/ava6969/rgb_stacking_extend
