@@ -1,5 +1,5 @@
 env_name: StackRGBTrain-v1
-num_processes: 16
+num_processes: 64
 device: cuda:0
 algo: ppo
 plr: 7.0e-4
@@ -17,13 +17,13 @@ cuda_deterministic: False
 num_steps: 256
 log_interval: 10
 save_interval: 100
-num_env_steps: 2.0e+7
+num_env_steps: 1.0e+8
 log_dir: '/tmp/gym/'
 save_dir: './trained_models/'
 use_proper_time_limits: False
 eval_interval: null
 use_linear_lr_decay: True
-num_mini_batch: 4
+num_mini_batch: 8
 ppo_epoch: 3
 
 model:
