@@ -23,6 +23,8 @@ save_dir: './trained_models/'
 use_proper_time_limits: False
 eval_interval: null
 use_linear_lr_decay: True
+num_mini_batch: 4
+ppo_epoch: 3
 
 model:
   rec_type: lstm

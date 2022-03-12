@@ -1,3 +1,5 @@
+from typing import Dict
+
 import gym
 import torch
 import numpy as np
@@ -170,6 +172,16 @@ class RolloutStorage(object):
             for step in reversed(range(self.rewards.size(0))):
                 self.returns[step] = self.returns[step + 1] * \
                                      gamma * self.masks[step + 1] + self.rewards[step]
+    @staticmethod
+    def apply_to_dict_obs(obs, fn):
+        _out = dict()
+        for k, v in obs.items():
+            _out[k] = fn(v)
+        return _out
+
+    def apply_in_place_to_dict_obs(self, fn):
+        for k, v in self.obs.items():
+            fn(k, v)
 
     def feed_forward_generator(self,
                                advantages,
@@ -218,7 +230,7 @@ class RolloutStorage(object):
         num_envs_per_batch = num_processes // num_mini_batch
         perm = torch.randperm(num_processes)
         for start_ind in range(0, num_processes, num_envs_per_batch):
-            obs_batch = []
+            obs_batch = dict({k : [] for k in self.obs})
             recurrent_hidden_states_batch = [[], []]
             actions_batch = []
             value_preds_batch = []
@@ -229,7 +241,7 @@ class RolloutStorage(object):
 
             for offset in range(num_envs_per_batch):
                 ind = perm[start_ind + offset]
-                obs_batch.append(self.obs[:-1, ind])
+                self.apply_in_place_to_dict_obs(lambda k, x: obs_batch[k].append(x[:-1, ind]))
                 self.append_recurrent_state(recurrent_hidden_states_batch[0],
                                             recurrent_hidden_states_batch[1],
                                             lambda x: x[0:1, ind])
@@ -243,7 +255,7 @@ class RolloutStorage(object):
 
             T, N = self.num_steps, num_envs_per_batch
             # These are all tensors of size (T, N, -1)
-            obs_batch = torch.stack(obs_batch, 1)
+            obs_batch = self.apply_to_dict_obs(obs_batch, lambda x: torch.stack(x, 1))
             actions_batch = torch.stack(actions_batch, 1)
             value_preds_batch = torch.stack(value_preds_batch, 1)
             return_batch = torch.stack(return_batch, 1)
@@ -256,7 +268,7 @@ class RolloutStorage(object):
                                                                        recurrent_hidden_states_batch[1], N)
 
             # Flatten the (T, N, ...) tensors to (T * N, ...)
-            obs_batch = _flatten_helper(T, N, obs_batch)
+            obs_batch = self.apply_to_dict_obs(obs_batch, lambda v: v.view(T * N, *v.size()[2:]))
             actions_batch = _flatten_helper(T, N, actions_batch)
             value_preds_batch = _flatten_helper(T, N, value_preds_batch)
             return_batch = _flatten_helper(T, N, return_batch)
