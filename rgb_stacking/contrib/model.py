@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from rgb_stacking.contrib.relational_net import ResidualSelfAttention, ResidualSelfAttentionCell
-from rgb_stacking.contrib.vision_net import NatureNet
+from rgb_stacking.contrib.vision_net import NatureNet, RelationalImpalaResnet, RobotImageResnetModule
 from rgb_stacking.contrib.recurrent_net import RecurrentNet
 from rgb_stacking.contrib.arguments import PolicyOption
 import gym
@@ -17,19 +17,22 @@ class BasicPolicy(nn.Module):
                  obs_space: gym.spaces.Dict,
                  option: PolicyOption,
                  policy: bool,
-                 output_layer):
+                 output_layer,
+                 image_net=None):
         super(BasicPolicy, self).__init__()
 
-        self.feature_extractor, out_shape = Policy.build_feature_extract(obs_space, option, policy)
+        self.feature_extractor, out_shape = Policy.build_feature_extract(obs_space, option, policy, image_net)
         out_size = out_shape[-1]
 
         if 'post' in option.feature_extract:
             post_t = option.feature_extract['post']
+
             if post_t == 'sum':
                 self.post_process_feature_extract = Sum(1)
             elif post_t == 'mean':
                 self.post_process_feature_extract = Mean(1)
-            else:
+
+            elif post_t == 'attn':
                 if 'n_blocks' in option.feature_extract:
                     self.post_process_feature_extract = ResidualSelfAttention(
                         option.feature_extract['n_blocks'],
@@ -45,6 +48,8 @@ class BasicPolicy(nn.Module):
                         option.feature_extract['attn_embed_dim'],
                         True,
                         option.feature_extract['max_pool_out'])
+            else:
+                raise TypeError('post_t only supports [attn|sum|mean] not {}'.format(post_t))
 
         self.rec_net = RecurrentNet(out_size,  option)
         max_action = obs_space['past_action'].high[0]
@@ -68,11 +73,16 @@ class BasicPolicy(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, obs_space: gym.Space, action_space, option: PolicyOption):
+    def __init__(self, obs_space: gym.spaces.Dict, action_space, option: PolicyOption):
         super(Policy, self).__init__()
+        self.image_net = None
+        if "image_bl" in obs_space.spaces.keys():
+            image_shape = obs_space.spaces['image_bl'].shape
+            self.image_net = RobotImageResnetModule( list(image_shape), option.feature_extract['resnet_filters'])
 
         self.critic = BasicPolicy(obs_space, option, False,
-                                  init_(nn.Linear(option.hidden_size, 1)))
+                                  init_(nn.Linear(option.hidden_size, 1)),
+                                  self.image_net)
 
         self.rec_type = option.rec_type
         self._recurrent_hidden_state_size = option.hidden_size if self.is_recurrent else 1
@@ -87,7 +97,7 @@ class Policy(nn.Module):
         else:
             raise NotImplementedError
 
-        self.actor = BasicPolicy(obs_space, option, True, dist)
+        self.actor = BasicPolicy(obs_space, option, True, dist, self.image_net)
 
     @property
     def is_recurrent(self):
@@ -108,6 +118,7 @@ class Policy(nn.Module):
         return self._recurrent_hidden_state_size
 
     def forward(self, inputs, rnn_hxs, masks):
+        inputs = self.image_net(inputs) if self.image_net else inputs
         logit, rnn_hxs['actor'] = self.actor(inputs, rnn_hxs['actor'], masks)
         value, rnn_hxs['critic'] = self.critic(inputs, rnn_hxs['critic'], masks)
         return value, logit, rnn_hxs
@@ -137,25 +148,24 @@ class Policy(nn.Module):
         return value, action_log_probs, dist_entropy, rnn_hxs
 
     @staticmethod
-    def build_feature_extract(obs_space: gym.spaces.Dict, option: PolicyOption, policy: bool):
+    def build_feature_extract(obs_space: gym.spaces.Dict, option: PolicyOption, policy: bool, image_net=None):
 
-        if len(obs_space.spaces) > 3:
+        if "observation" not in obs_space.spaces.keys():
             spaces = obs_space.spaces
             embed_dict = torch.nn.ModuleDict()
             for k in (option.policy_keys if policy else option.value_keys):
                 if 'reward' not in k and 'action' not in k:
                     space = spaces[k]
                     if len(space.shape) != 3:
+                        extra_dim = image_net.flat_size if image_net else 0
                         embed_dict[k] = init_(
-                            torch.nn.Linear(int(np.prod(space.shape)), option.feature_extract['embed_out']))
-                    else:
-                        embed_dict[k] = NatureNet(space.shape, option.feature_extract['vision_out'])
+                            torch.nn.Linear(int(np.prod(space.shape)) + extra_dim, option.feature_extract['embed_out']))
             return embed_dict, [len(embed_dict), option.feature_extract['embed_out']]
         else:
-            in_ = np.ravel(obs_space["observation"].shape)[0]
+            extra_dim = image_net.flat_size if image_net else 0
+            in_ = np.ravel(obs_space["observation"].shape)[0] + extra_dim
             out_size = option.feature_extract['flatten_out']
             model = torch.nn.Sequential(init_(torch.nn.Linear(in_, out_size)),
                                         torch.nn.ReLU(),
                                         init_(torch.nn.Linear(out_size, out_size)))
-
             return model, [1, out_size]

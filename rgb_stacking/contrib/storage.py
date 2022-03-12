@@ -38,7 +38,7 @@ class RolloutStorage(object):
         if isinstance(obs_space, gym.spaces.Box):
             self.obs = torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
         else:
-            self.obs = {k: torch.zeros(num_steps + 1, num_processes, int(np.prod(obs_space.shape)))
+            self.obs = {k: torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
                         for k, obs_space in obs_space.spaces.items()}
 
         self.masks = torch.ones(num_steps + 1, num_processes, 1)

@@ -62,6 +62,12 @@ class GymWrapper(gym.Env):
         shape_map['past_reward'] = gym.spaces.Box(-np.inf, np.inf, [1])
         shape_map['past_action'] = gym.spaces.Box(np.array([0, 0, 0, 0, 0]),
                                                   np.array([GymWrapper.ACTION_BIN_SIZE - 1]*4 + [1]))
+        if self.add_image:
+            img_shape = np.roll(obs_spec['basket_back_left/pixels'].shape, 1)
+            shape_map['image_bl'] = gym.spaces.Box(0, 1, img_shape)
+            shape_map['image_fl'] = gym.spaces.Box(0, 1, img_shape)
+            shape_map['image_fr'] = gym.spaces.Box(0, 1, img_shape)
+
         self.observation_space = gym.spaces.Dict(shape_map)
 
     def make_box_obs_space(self, obs_spec):
@@ -113,10 +119,14 @@ class GymWrapper(gym.Env):
 
     def __init__(self, object_triplet,
                  obs_preprocess=ObservationPreprocess.FLATTEN,
-                 num_discrete_action_bin: int = None):
+                 num_discrete_action_bin: int = None,
+                 add_image=False):
 
         GymWrapper.ACTION_BIN_SIZE = num_discrete_action_bin
-        self.env = environment.rgb_stacking(object_triplet=object_triplet)
+        self.env = environment.rgb_stacking(object_triplet=object_triplet,
+                                            observation_set=environment.ObservationSet.ALL if add_image
+                                            else environment.ObservationSet.STATE_ONLY)
+        self.add_image = add_image
         self.obs_preprocess = obs_preprocess
 
         obs_spec = self.env.observation_spec()
@@ -147,6 +157,16 @@ class GymWrapper(gym.Env):
             else actor_based_observation(obs)
         base['past_reward'] = np.array([self.past_reward], float)
         base['past_action'] = np.array(self.past_action, int)
+        if self.add_image:
+            # cv2.imshow('image_bl', cv2.cvtColor(obs['basket_back_left/pixels'], cv2.COLOR_BGR2RGB))
+            # cv2.waitKey(0)
+            # cv2.imshow('image_fl', cv2.cvtColor(obs['basket_front_left/pixels'], cv2.COLOR_BGR2RGB))
+            # cv2.waitKey(0)
+            # cv2.imshow('image_fr', cv2.cvtColor(obs['basket_front_right/pixels'], cv2.COLOR_BGR2RGB))
+            # cv2.waitKey(0)
+            base['image_bl'] = np.transpose(obs['basket_back_left/pixels'], (2, 0, 1))/255
+            base['image_fl'] = np.transpose(obs['basket_front_left/pixels'], (2, 0, 1))/255
+            base['image_fr'] = np.transpose(obs['basket_front_right/pixels'], (2, 0, 1))/255
         return base
 
     def reset(self):
@@ -186,7 +206,7 @@ def main(argv: Sequence[str]) -> None:
     del argv
     import tabulate
 
-    env = GymWrapper('rgb_train_random', ObservationPreprocess.ACTOR_BASED, 11)
+    env = GymWrapper('rgb_train_random', ObservationPreprocess.ACTOR_BASED, 11, True)
     print(env.observation_space.spaces.keys())
     print('observation_space\n', tabulate.tabulate([[k, v.shape] for k, v in env.observation_space.spaces.items()]))
     print('action_space', env.action_space)

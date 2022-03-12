@@ -24,7 +24,7 @@ class A2C_ACKTR():
 
         self.acktr = acktr
         self.vf_coef = vf_coef
-        self.shared_model = vf_coef is not None
+        self.shared_model = self.actor_critic.image_net
         self.entropy_coef = entropy_coef
 
         self.max_grad_norm = max_grad_norm
@@ -33,7 +33,7 @@ class A2C_ACKTR():
             else optim.RMSprop(_m.parameters(), _lr, eps=eps, alpha=alpha) \
             if alpha else optim.Adam(_m.parameters(), _lr, eps=eps)
 
-        if vf_coef:
+        if self.shared_model:
             self.actor_critic_optimizer = optim_fn(self.actor_critic, plr)
         else:
             self.actor_optimizer = optim_fn(self.actor, plr)
