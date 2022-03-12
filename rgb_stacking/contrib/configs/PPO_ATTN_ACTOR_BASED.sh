@@ -1,7 +1,6 @@
 #!/bin/bash -l
 # NOTE the -l flag!
 #SBATCH -J PPO_ATTN_ACTOR_BASED
-#SBATCH --output %x_%j.out
 #SBATCH --error %x_%j.err
 #SBATCH --mail-user=ava6969@rit.edu
 #SBATCH --mail-type=ALL
