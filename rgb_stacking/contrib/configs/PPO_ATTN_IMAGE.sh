@@ -5,19 +5,19 @@
 #SBATCH --mail-user=ava6969@rit.edu
 #SBATCH --mail-type=ALL
 
-#SBATCH -t 1-00:00:00
+#SBATCH -t 2-10:00:0
 
 #Put the job in the appropriate partition matching the account and request FOUR cours
 
 #SBATCH --account shapes
-#SBATCH --partition debug
+#SBATCH --partition tier3
 #SBATCH --ntasks 1
 #SBATCH -c 36
 
 #Job membory requirements in MB=m (default), GB=g, or TB=t
 #SBATCH --mem=300g
 
-#SBATCH --gres=gpu:a100:2
+#SBATCH --gres=gpu:v100:2
 export OPENBLAS_NUM_THREADS=1
 conda activate shapes
 cd /home/ava6969/rgb_stacking_extend
