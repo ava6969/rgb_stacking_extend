@@ -14,7 +14,7 @@ value_loss_coef: 0.5
 max_grad_norm: 0.5
 seed: 1
 cuda_deterministic: False
-num_steps: 256
+num_steps: 16
 log_interval: 10
 save_interval: 100
 num_env_steps: 1.0e+8
@@ -37,7 +37,7 @@ model:
     post: attn
     attn_embed_dim: 256
     max_pool_out: False
-    resnet_filters: [16, 16, 32, 32, 32, 32]
+    resnet_filters: [16, 16, 32, 32, 64, 64, 128]
 
   policy_keys: &1 ['boxes',
                    'robot0:joints',
