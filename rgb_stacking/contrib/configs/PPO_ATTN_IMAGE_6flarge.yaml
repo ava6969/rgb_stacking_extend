@@ -19,7 +19,7 @@ log_interval: 10
 save_interval: 100
 num_env_steps: 1.0e+9
 log_dir: '/tmp/gym/'
-save_dir: './vision_models/base'
+save_dir: './vision_models/large'
 use_proper_time_limits: False
 eval_interval: null
 use_linear_lr_decay: True
@@ -37,7 +37,7 @@ model:
     post: attn
     attn_embed_dim: 256
     max_pool_out: False
-    resnet_filters: [16, 16, 32, 32, 64, 64, 128]
+    resnet_filters: [32, 64, 64, 128, 128, 64]
 
   policy_keys: &1 ['boxes',
                    'robot0:joints',

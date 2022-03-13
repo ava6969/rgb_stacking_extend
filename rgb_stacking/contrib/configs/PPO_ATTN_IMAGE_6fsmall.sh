@@ -1,6 +1,6 @@
 #!/bin/bash -l
 # NOTE the -l flag!
-#SBATCH -J A2C_PURE
+#SBATCH -J PPO_ATTN_IMAGE_6fSMALL
 #SBATCH --error %x_%j.err
 #SBATCH --mail-user=ava6969@rit.edu
 #SBATCH --mail-type=ALL
@@ -17,8 +17,8 @@
 #Job membory requirements in MB=m (default), GB=g, or TB=t
 #SBATCH --mem=300g
 
-#SBATCH --gres=gpu:p4:2
+#SBATCH --gres=gpu:a100:2
 export OPENBLAS_NUM_THREADS=1
 conda activate shapes
 cd /home/ava6969/rgb_stacking_extend
-time  MUJOCO_GL=egl python3 rgb_stacking/run.py --config_path rgb_stacking/contrib/configs/A2C_PURE.yaml
+time  MUJOCO_GL=egl python3 rgb_stacking/run.py --config_path rgb_stacking/contrib/configs/PPO_ATTN_IMAGE_6fsmall.yaml
