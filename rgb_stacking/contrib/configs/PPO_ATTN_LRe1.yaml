@@ -1,0 +1,48 @@
+env_name: StackRGBTrain-v3
+num_processes: 64
+device: cuda:1
+algo: ppo
+plr: 1.0e-4
+vlr: 1.0e-4
+alpha: 0.99
+gamma: 0.99
+eps: 1.0e-5
+use_gae: True
+gae_lambda: 0.95
+entropy_coef: 0.01
+value_loss_coef: null
+max_grad_norm: 0.5
+seed: 1
+cuda_deterministic: False
+num_steps: 256
+log_interval: 10
+save_interval: 100
+num_env_steps: 1.0e+7
+log_dir: '/tmp/gym/'
+save_dir: './benchmark_model/'
+use_proper_time_limits: False
+eval_interval: null
+use_linear_lr_decay: True
+num_mini_batch: 8
+ppo_epoch: 3
+
+model:
+  rec_type: lstm
+  hidden_size: 512
+
+  feature_extract:
+    embed_out: 256
+    vision_out: 512
+    flatten_out: 1024
+    act_fn: relu
+    heads: 4
+    post: attn
+    attn_embed_dim: 256
+    max_pool_out: False
+
+  policy_keys: &1 ['boxes',
+                   'robot0:joints',
+                   'robot0:others']
+
+  value_keys: *1
+
