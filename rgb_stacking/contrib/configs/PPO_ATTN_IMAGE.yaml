@@ -40,7 +40,7 @@ model:
     post: attn
     attn_embed_dim: 256
     max_pool_out: False
-    resnet_filters: [16, 16, 32, 32, 64, 64, 128]
+    resnet_filters: [16, 16, 32, 32, 32, 32,
 
   policy_keys: &1 ['boxes',
                    'robot0:joints',
