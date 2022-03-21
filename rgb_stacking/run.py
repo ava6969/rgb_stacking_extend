@@ -184,7 +184,7 @@ def main(argv: Sequence[str]) -> None:
         actor_critic.train()
 
         if cat_rollout is not None:
-            value_loss, action_loss, dist_entropy = agent.update(avg_grad_comm, cat_rollout)
+            value_loss, action_loss, dist_entropy = agent.update(avg_grad_comm, cat_rollout, args.num_learners)
 
         rollouts.after_update()
 

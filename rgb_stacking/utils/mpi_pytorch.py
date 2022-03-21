@@ -21,12 +21,12 @@ def setup_pytorch_for_mpi():
     # print('Proc %d: Reporting new number of Torch threads as %d.'%(proc_id(), torch.get_num_threads()), flush=True)
 
 
-def mpi_avg_grads(module, comm):
+def mpi_avg_grads(module, comm, num_learners):
     """ Average contents of gradient buffers across MPI processedef learner_group(learner_ranks: List[int]):
     if proc_id() in learner_ranks:
         return MPI.COMM_WORLD.group.Incl(learner_ranks)
     return Nones. """
-    if num_procs() == 1:
+    if num_learners == 1:
         return
 
     for p in module.parameters():
@@ -36,11 +36,10 @@ def mpi_avg_grads(module, comm):
 
 
 def learner_group(num_learners):
-    rollout_per_learner_group = MPI.COMM_WORLD.Split(num_learners if num_learners <=1 else proc_id() // num_learners, proc_id())
-    sz = num_procs() // num_learners
+    rollout_per_learner_group = MPI.COMM_WORLD.Split(proc_id() % num_learners, proc_id())
 
-    learner_ranks = [r for r in range(0, num_procs(), sz)]
-    if rollout_per_learner_group.rank == 0:
+    learner_ranks = [r for r in range(num_learners)]
+    if proc_id() < num_learners:
         return MPI.COMM_WORLD.Create_group(MPI.COMM_WORLD.group.Incl(learner_ranks)), rollout_per_learner_group
     return None, rollout_per_learner_group
 
@@ -50,5 +49,6 @@ def sync_params(module):
     if num_procs() == 1:
         return
     for p in module.parameters():
-        p_numpy = p.cpu().data.numpy()
-        broadcast(p_numpy)
+        p_np = p.cpu().data.numpy()
+        broadcast(p_np)
+        p.data = torch.from_numpy(p_np).float().to(p.device)

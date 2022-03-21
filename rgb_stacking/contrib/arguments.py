@@ -5,8 +5,6 @@ from typing import Dict, List
 
 from rgb_stacking.utils.mpi_tools import num_procs, proc_id, msg
 
-LEARNER_PROCESS = 3
-
 @dataclass
 class PolicyOption:
     feature_extract: Dict = None
@@ -81,6 +79,13 @@ def get_args(path):
         args.model.horizon_length = args.num_steps
 
     msg('Successfully loaded')
+    if args.device == 'infer':
+        n_devices = torch.cuda.device_count()
+        device_id = proc_id() % n_devices
+        args.device = 'cuda:{}'.format(device_id)
+        _cuda = torch.cuda.device(args.device)
+        msg('{}\t{}'.format(str(torch.cuda.get_device_properties(_cuda)), str(args.device)))
+
     if num_procs() > 1:
         args.num_env_steps = args.num_env_steps // num_procs()
         args.seed += 10000 * proc_id()

@@ -1,10 +1,10 @@
 env_name: StackRGBTrain-v1
 
 num_envs_per_cpu: 8
-num_learners: 2
+num_learners: 1
 use_multi_thread: False
 
-device: cuda:0
+device: infer
 algo: ppo
 plr: 7.0e-4
 vlr: 7.0e-4
@@ -18,8 +18,8 @@ value_loss_coef: null
 max_grad_norm: 0.5
 seed: 1
 cuda_deterministic: False
-num_steps: 5
-log_interval: 2
+num_steps: 10
+log_interval: 10
 save_interval: 100
 num_env_steps: 1.0e+7
 log_dir: '/tmp/gym/'
