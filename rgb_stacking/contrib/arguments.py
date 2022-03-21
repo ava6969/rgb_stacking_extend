@@ -1,10 +1,11 @@
 import argparse
 from dataclasses import dataclass
 import torch, yaml
-from typing import Dict
+from typing import Dict, List
 
-# from rgb_stacking.contrib.mpi_tools import num_procs
+from rgb_stacking.utils.mpi_tools import num_procs, proc_id, msg
 
+LEARNER_PROCESS = 3
 
 @dataclass
 class PolicyOption:
@@ -36,7 +37,11 @@ class Arg:
     seed: int = 1
     cuda_deterministic: bool = False
     device: str = 'cuda:0'
-    num_processes: int = 16
+
+    num_envs_per_cpu: int = None
+    num_learners: int = 1
+    use_multi_thread: bool = False
+
     num_steps: int = 5
     ppo_epoch: int = 4
     num_mini_batch: int = 32
@@ -74,6 +79,14 @@ def get_args(path):
 
     if not args.model.horizon_length:
         args.model.horizon_length = args.num_steps
+
+    msg('Successfully loaded')
+    if num_procs() > 1:
+        args.num_env_steps = args.num_env_steps // num_procs()
+        args.seed += 10000 * proc_id()
+
+    if args.num_envs_per_cpu is None:
+        args.num_envs_per_cpu = 1
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
     if args.recurrent_policy is not None:

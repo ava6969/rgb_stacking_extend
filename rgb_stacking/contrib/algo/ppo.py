@@ -16,7 +16,7 @@ class PPO(A2C_ACKTR):
         self.num_mini_batch = num_mini_batch
         self.use_clipped_value_loss = use_clipped_value_loss
 
-    def update(self, rollouts):
+    def update(self, COMM, rollouts):
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
             advantages.std() + 1e-5)
@@ -61,7 +61,7 @@ class PPO(A2C_ACKTR):
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-                self.update_actor_critic(action_loss, value_loss, dist_entropy)
+                self.update_actor_critic(COMM, action_loss, value_loss, dist_entropy)
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()

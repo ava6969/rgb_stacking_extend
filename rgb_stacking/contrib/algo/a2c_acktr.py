@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from a2c_ppo_acktr.a2c_ppo_acktr.algo.kfac import KFACOptimizer
+from rgb_stacking.contrib.algo.kfac import KFACOptimizer
 # from rgb_stacking.contrib.mpi_pytorch import mpi_avg_grads
+from rgb_stacking.utils.mpi_pytorch import mpi_avg_grads
 
 
 class A2C_ACKTR():
@@ -68,24 +69,27 @@ class A2C_ACKTR():
             vf_fisher_loss.backward(retain_graph=True)
             self.critic_optimizer.acc_stats = False
 
-    def update_model(self, opt, loss, model):
+    def update_model(self, COMM, opt, loss, model):
         opt.zero_grad()
         loss.backward()
         if not self.acktr:
             nn.utils.clip_grad_norm_(model.parameters(), self.max_grad_norm)
-        # mpi_avg_grads(model)
+        mpi_avg_grads(model, COMM)
         opt.step()
 
-    def update_actor_critic(self, action_loss, value_loss, dist_entropy):
+    def update_actor_critic(self, COMM, action_loss, value_loss, dist_entropy):
         if self.shared_model:
-            self.update_model(self.actor_critic_optimizer,
+            self.update_model(COMM,
+                              self.actor_critic_optimizer,
                               action_loss - self.entropy_coef * dist_entropy + self.vf_coef * value_loss,
                               self.actor_critic)
         else:
-            self.update_model(self.actor_optimizer, action_loss - self.entropy_coef * dist_entropy, self.actor)
-            self.update_model(self.critic_optimizer, value_loss, self.critic)
+            self.update_model(COMM,
+                              self.actor_optimizer, action_loss - self.entropy_coef * dist_entropy, self.actor)
+            self.update_model(COMM,
+                              self.critic_optimizer, value_loss, self.critic)
 
-    def update(self, rollouts):
+    def update(self, COMM, rollouts):
 
         action_shape = rollouts.actions.size()[-1]
 
@@ -110,6 +114,6 @@ class A2C_ACKTR():
                  (not self.shared_model and self.actor_optimizer.steps % self.actor_optimizer.Ts == 0)):
             self.kfac_update(action_log_probs, values)
         else:
-            self.update_actor_critic(action_loss, value_loss, dist_entropy)
+            self.update_actor_critic(COMM, action_loss, value_loss, dist_entropy)
 
         return value_loss.item(), action_loss.item(), dist_entropy.item()

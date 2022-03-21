@@ -1,7 +1,8 @@
 import os
 from collections import OrderedDict
-from typing import Union, Dict
-
+from copy import deepcopy
+from typing import Union, Dict, List, Callable
+import threading
 import gym
 import numpy as np
 import torch
@@ -19,6 +20,8 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnvStepReturn
 from stable_baselines3.common.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
 
+from rgb_stacking.utils.mpi_tools import msg
+
 try:
     import dmc2gym
 except ImportError:
@@ -35,7 +38,7 @@ except ImportError:
     pass
 
 
-def make_env(env_id, seed, rank, log_dir, allow_early_resets):
+def make_env(env_id, seed, rank, log_dir):
     def _thunk():
         env = gym.make(env_id)
         env.seed(seed + rank)
@@ -46,7 +49,7 @@ def make_env(env_id, seed, rank, log_dir, allow_early_resets):
         if log_dir is not None:
             env = Monitor(env,
                           os.path.join(log_dir, str(rank)),
-                          allow_early_resets=allow_early_resets)
+                          allow_early_resets=False)
         return env
 
     return _thunk
@@ -56,20 +59,16 @@ def make_vec_envs(env_name,
                   seed,
                   num_processes,
                   gamma,
-                  log_dir,
                   device,
-                  allow_early_resets,
-                  num_frame_stack=None):
+                  log_dir,
+                  use_multi_thread):
+
     envs = [
-        make_env(env_name, seed, i, log_dir, allow_early_resets)
+        make_env(env_name, seed, i, log_dir)
         for i in range(num_processes)
     ]
 
-    if num_processes > 1:
-        envs = SubprocVecEnv(envs, "spawn")
-    else:
-        envs = DummyVecEnv(envs)
-
+    envs = MultiThreadedVecEnv(envs) if use_multi_thread else DummyVecEnv(envs)
     envs = VecNormalize(envs, gamma=gamma)
     envs = VecPyTorch(envs, device)
 
@@ -154,6 +153,61 @@ class VecPyTorch(VecEnvWrapper):
         obs = self.observation(obs)
         reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
         return obs, reward, done, info
+
+
+class Worker(threading.Thread):
+    def __init__(self, env, venv, env_idx):
+        super().__init__()
+        self.env = env
+        self.venv = venv
+        self.env_idx = env_idx
+
+    def run(self) -> None:
+        while not self.venv.done:
+            self.venv.begin_barrier.wait()
+            obs, self.venv.buf_rews[self.env_idx], \
+            self.venv.buf_dones[self.env_idx], \
+            self.venv.buf_infos[self.env_idx] \
+                = self.venv[self.env_idx].step(self.venv.actions[self.env_idx])
+            if self.venv.buf_dones[self.env_idx]:
+                # save final observation where user can get it, then reset
+                self.venv.buf_infos[self.env_idx]["terminal_observation"] = obs
+                obs = self.venv.envs[self.env_idx].reset()
+            self.venv._save_obs(self.env_idx, obs)
+            self.venv.end_barrier.wait()
+
+
+class MultiThreadedVecEnv(DummyVecEnv):
+
+    def _complete_step(self):
+        self.step_return = self._obs_from_buf(), np.copy(self.buf_rews), np.copy(self.buf_dones), deepcopy(self.buf_infos)
+
+    def __init__(self, env_fns: List[Callable[[], gym.Env]]):
+        super().__init__(env_fns)
+        msg('Creating Threads')
+        self.done = False
+        self.step_return = None
+
+        self.begin_barrier, self.end_barrier = threading.Barrier(self.num_envs + 1), \
+                                               threading.Barrier(self.num_envs + 1, self._complete_step)
+
+        self.threads = [Worker(env, self, i) for i, env in enumerate(self.envs)]
+        for t in self.threads:
+            t.start()
+
+    def step_wait(self) -> VecEnvStepReturn:
+        self.begin_barrier.wait()
+        self.end_barrier.wait()
+        return self.step_return
+
+    def __getitem__(self, index):
+        return self.envs[index]
+
+    def close(self) -> None:
+        msg('joining all threads')
+        self.done = True
+        for t in self.threads:
+            t.join()
 
 
 class VecNormalize(VecNormalize_):

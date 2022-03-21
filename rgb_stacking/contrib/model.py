@@ -8,7 +8,7 @@ from rgb_stacking.contrib.vision_net import NatureNet, RelationalImpalaResnet, R
 from rgb_stacking.contrib.recurrent_net import RecurrentNet
 from rgb_stacking.contrib.arguments import PolicyOption
 import gym
-from a2c_ppo_acktr.a2c_ppo_acktr.distributions import DiagGaussian, MultiCategorical, Categorical
+from rgb_stacking.a2c_ppo_acktr.distributions import DiagGaussian, MultiCategorical, Categorical
 from rgb_stacking.contrib.common import *
 
 

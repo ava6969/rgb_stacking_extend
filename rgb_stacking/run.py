@@ -1,5 +1,7 @@
-
 import os
+
+from rgb_stacking.utils.mpi_pytorch import sync_params, learner_group, MPI
+from rgb_stacking.utils.mpi_tools import proc_id, num_procs, gather, msg
 
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 from collections import deque
@@ -8,18 +10,17 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import torch
 import time
-from a2c_ppo_acktr.a2c_ppo_acktr import utils
+from rgb_stacking.a2c_ppo_acktr import utils
 from rgb_stacking.contrib import algo
 from rgb_stacking.contrib.arguments import get_args
 from rgb_stacking.contrib.envs import make_vec_envs
 from rgb_stacking.contrib.model import Policy
 from rgb_stacking.contrib.storage import RolloutStorage
-from a2c_ppo_acktr.evaluation import evaluate
+from rgb_stacking.a2c_ppo_acktr.evaluation import evaluate
 import logging
 from absl import app
 from absl import flags
 from absl.flags import FLAGS
-
 
 flags.DEFINE_string('config_path',
                     "/home/ava6969/rgb_stacking_extend/rgb_stacking/contrib/configs/CONFIG_A.yaml",
@@ -28,9 +29,8 @@ flags.DEFINE_string('config_path',
 
 def main(argv: Sequence[str]) -> None:
 
-    logging.getLogger("imported_module").setLevel(logging.ERROR)
-
     env = os.environ.copy()
+
     env.update(
         MKL_NUM_THREADS="1",
         OMP_NUM_THREADS="1",
@@ -40,15 +40,17 @@ def main(argv: Sequence[str]) -> None:
     args = get_args(FLAGS.config_path)
 
     torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+
     if args.device != 'cpu' and args.cuda_deterministic:
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
 
+    writer = SummaryWriter('runs_{}'.format(proc_id() + 1))
 
-    writer = SummaryWriter()
     log_dir = os.path.expanduser(args.log_dir)
-    eval_log_dir = log_dir + "_eval"
+    eval_log_dir = log_dir + "_eval{}".format(proc_id() + 1)
     utils.cleanup_log_dir(log_dir)
     utils.cleanup_log_dir(eval_log_dir)
 
@@ -57,15 +59,17 @@ def main(argv: Sequence[str]) -> None:
 
     envs = make_vec_envs(args.env_name,
                          args.seed,
-                         args.num_processes,
+                         args.num_envs_per_cpu,
                          args.gamma,
-                         args.log_dir,
-                         device, False)
+                         device,
+                         eval_log_dir,
+                         args.use_multi_thread)
 
     actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
     actor_critic.to(device)
 
-    print(actor_critic)
+    if proc_id() == 0:
+        print(actor_critic)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
@@ -95,10 +99,18 @@ def main(argv: Sequence[str]) -> None:
         agent = algo.A2C_ACKTR(
             actor_critic, args.value_loss_coef, args.entropy_coef, acktr=True)
 
-    rollouts = RolloutStorage(args.num_steps, args.num_processes,
+    rollouts = RolloutStorage(args.num_steps,
+                              args.num_envs_per_cpu,
                               envs.observation_space, envs.action_space,
                               args.model.hidden_size,
                               args.model.rec_type)
+
+    avg_grad_comm, rollout_per_learner_comm = learner_group(args.num_learners)
+    msg('avg_grad_group(rank={}, size={}), '
+        'rollout_per_learner_group(rank={}, size={})'.format(avg_grad_comm.rank if avg_grad_comm else 'null',
+                                                             avg_grad_comm.size if avg_grad_comm else 'null',
+                                                             rollout_per_learner_comm.rank if rollout_per_learner_comm else 'null',
+                                                             rollout_per_learner_comm.size if rollout_per_learner_comm else 'null'))
 
     obs = envs.reset()
 
@@ -111,11 +123,13 @@ def main(argv: Sequence[str]) -> None:
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=100)
-
     start = time.time()
     num_updates = int(
-        args.num_env_steps) // args.num_steps // args.num_processes
+        args.num_env_steps * num_procs() * args.num_envs_per_cpu) // args.num_steps
+
     for j in range(num_updates):
+
+        sync_params(actor_critic)
         actor_critic.eval()
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
@@ -133,7 +147,7 @@ def main(argv: Sequence[str]) -> None:
                     agent.critic_optimizer.lr if args.algo == "acktr" else args.vlr)
 
                 writer.add_scalar('LearningRate/Critic', v_lr_, j)
-                writer.add_scalar('LearningRate/Actor',  p_lr_, j)
+                writer.add_scalar('LearningRate/Actor', p_lr_, j)
 
         for step in range(args.num_steps):
             # Sample actions
@@ -165,55 +179,64 @@ def main(argv: Sequence[str]) -> None:
 
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.gae_lambda)
 
+        cat_rollout = rollouts.mpi_gather(rollout_per_learner_comm)
+
         actor_critic.train()
 
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)
+        if cat_rollout is not None:
+            value_loss, action_loss, dist_entropy = agent.update(avg_grad_comm, cat_rollout)
 
         rollouts.after_update()
 
         # save for every interval-th episode or for the last epoch
-        if (j % args.save_interval == 0
-            or j == num_updates - 1) and args.save_dir != "":
-            save_path = os.path.join(args.save_dir, args.algo)
-            try:
-                os.makedirs(save_path)
-            except OSError:
-                pass
+        _group_episode_rewards = gather(MPI.COMM_WORLD, episode_rewards)
+        group_episode_rewards = []
+        if proc_id() == 0:
+            for x in _group_episode_rewards:
+                group_episode_rewards.extend(x)
 
-            torch.save([
-                actor_critic,
-                getattr(utils.get_vec_normalize(envs), 'obs_rms', None)
-            ], os.path.join(save_path, args.env_name + ".pt"))
+            if (j % args.save_interval == 0 or j == num_updates - 1) and args.save_dir != "":
+                save_path = os.path.join(args.save_dir, args.algo)
+                try:
+                    os.makedirs(save_path)
+                except OSError:
+                    pass
 
-        if j % args.log_interval == 0 and len(episode_rewards) > 1:
-            total_num_steps = (j + 1) * args.num_processes * args.num_steps
-            end = time.time()
-            fps = int(total_num_steps / (end - start))
+                torch.save([
+                    actor_critic,
+                    getattr(utils.get_vec_normalize(envs), 'obs_rms', None)
+                ], os.path.join(save_path, args.env_name + ".pt"))
 
-            # if rank == 0:
-            print(
-                "Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, "
-                "min/max reward {:.1f}/{:.1f}\n "
-                    .format(j, total_num_steps,
-                            fps,
-                            len(episode_rewards), np.mean(episode_rewards),
-                            np.median(episode_rewards), np.min(episode_rewards),
-                            np.max(episode_rewards), dist_entropy, value_loss,
-                            action_loss))
+            if j % args.log_interval == 0 and len(group_episode_rewards) > 1:
+                total_num_steps = (j + 1) * args.num_steps * args.num_envs_per_cpu * num_procs()
+                end = time.time()
+                fps = int(total_num_steps / (end - start))
 
-            writer.add_scalar('Reward/Mean', float(np.mean(episode_rewards)), total_num_steps)
-            writer.add_scalar('Reward/Min', float(np.min(episode_rewards)), total_num_steps)
-            writer.add_scalar('Reward/Median', float(np.median(episode_rewards)), total_num_steps)
-            writer.add_scalar('Reward/Max', float(np.max(episode_rewards)), total_num_steps)
-            writer.add_scalar('Timing/FPS', fps, total_num_steps)
+                print(
+                    "Updates {}, num timesteps {}, FPS {} \n Last {} "
+                    "training episodes: mean/median reward {:.1f}/{:.1f}, "
+                    "min/max reward {:.1f}/{:.1f}\n ".format(j, total_num_steps,
+                                                             fps,
+                                                             len(group_episode_rewards), np.mean(group_episode_rewards),
+                                                             np.median(group_episode_rewards),
+                                                             np.min(group_episode_rewards),
+                                                             np.max(group_episode_rewards), dist_entropy, value_loss,
+                                                             action_loss))
 
-        if (args.eval_interval is not None and len(episode_rewards) > 1
-                and j % args.eval_interval == 0):
-            obs_rms = utils.get_vec_normalize(envs).obs_rms
-            evaluate(actor_critic, obs_rms, args.env_name, args.seed,
-                     args.num_processes, eval_log_dir, device)
+                writer.add_scalar('Reward/Mean', float(np.mean(group_episode_rewards)), total_num_steps)
+                writer.add_scalar('Reward/Min', float(np.min(group_episode_rewards)), total_num_steps)
+                writer.add_scalar('Reward/Median', float(np.median(group_episode_rewards)), total_num_steps)
+                writer.add_scalar('Reward/Max', float(np.max(group_episode_rewards)), total_num_steps)
+                writer.add_scalar('Timing/FPS', fps, total_num_steps)
 
-        writer.add_scalar('Timing/Updates', j, j)
+            if (args.eval_interval is not None and len(group_episode_rewards) > 1
+                    and j % args.eval_interval == 0):
+                obs_rms = utils.get_vec_normalize(envs).obs_rms
+                evaluate(actor_critic, obs_rms, args.env_name, args.seed,
+                         # args.num_processes,
+                         1, eval_log_dir, device)
+
+            writer.add_scalar('Timing/Updates', j, j)
 
     envs.close()
     writer.close()

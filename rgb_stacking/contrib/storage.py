@@ -5,52 +5,64 @@ import torch
 import numpy as np
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
+from rgb_stacking.utils.mpi_tools import gather
+
 
 def _flatten_helper(T, N, _tensor):
     return _tensor.view(T * N, *_tensor.size()[2:])
 
 
 class RolloutStorage(object):
-    def __init__(self, num_steps, num_processes, obs_space, action_space,
-                 recurrent_hidden_state_size, recurrent_policy):
-
-        self.rewards = torch.zeros(num_steps, num_processes, 1)
-        self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
-        self.returns = torch.zeros(num_steps + 1, num_processes, 1)
-        self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
-        self.has_lstm = recurrent_policy == 'lstm'
-
-        if action_space.__class__.__name__ == 'Discrete':
-            action_shape = 1
-        else:
-            action_shape = action_space.shape[0]
-        self.actions = torch.zeros(num_steps, num_processes, action_shape)
-        if action_space.__class__.__name__ == 'Discrete':
-            self.actions = self.actions.long()
-
-        f = lambda: torch.zeros(num_steps + 1, num_processes, recurrent_hidden_state_size)
+    def __init__(self, num_steps=0, num_processes=0,
+                 obs_space=None, action_space=None,
+                 recurrent_hidden_state_size=0,
+                 recurrent_policy='lstm'):
 
         if recurrent_policy == 'gru':
-            self.recurrent_hidden_states = dict(actor=f(), critic=f())
+            self.recurrent_hidden_states = dict(actor=None, critic=None)
         else:
-            self.recurrent_hidden_states = dict(actor=(f(), f()), critic=(f(), f()))
+            self.recurrent_hidden_states = dict(actor=(None, None), critic=(None, None))
 
-        if isinstance(obs_space, gym.spaces.Box):
-            self.obs = torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
-        else:
-            self.obs = {k: torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
-                        for k, obs_space in obs_space.spaces.items()}
-
-        self.masks = torch.ones(num_steps + 1, num_processes, 1)
-
-        self.is_dict = isinstance(obs_space, gym.spaces.Dict)
-
-        # Masks that indicate whether it's a true terminal state
-        # or time limit end state
-        self.bad_masks = torch.ones(num_steps + 1, num_processes, 1)
-
+        self.has_lstm = recurrent_policy == 'lstm'
         self.num_steps = num_steps
         self.step = 0
+        self.is_dict = None
+
+        if num_steps > 0:
+            self.rewards = torch.zeros(num_steps, num_processes, 1)
+            self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
+            self.returns = torch.zeros(num_steps + 1, num_processes, 1)
+            self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
+
+            if action_space.__class__.__name__ == 'Discrete':
+                action_shape = 1
+            else:
+                action_shape = action_space.shape[0]
+            self.actions = torch.zeros(num_steps, num_processes, action_shape)
+            if action_space.__class__.__name__ == 'Discrete':
+                self.actions = self.actions.long()
+
+            f = lambda: torch.zeros(num_steps + 1, num_processes, recurrent_hidden_state_size)
+            self.is_dict = isinstance(obs_space, gym.spaces.Dict)
+            if recurrent_policy == 'gru':
+                self.recurrent_hidden_states = dict(actor=f(), critic=f())
+            else:
+                self.recurrent_hidden_states = dict(actor=(f(), f()), critic=(f(), f()))
+
+            if isinstance(obs_space, gym.spaces.Box):
+                self.obs = torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
+            else:
+                self.obs = {k: torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
+                            for k, obs_space in obs_space.spaces.items()}
+
+            self.masks = torch.ones(num_steps + 1, num_processes, 1)
+
+            # Masks that indicate whether it's a true terminal state
+            # or time limit end state
+            self.bad_masks = torch.ones(num_steps + 1, num_processes, 1)
+
+    def clone(self):
+        return RolloutStorage(0, 0)
 
     def get_from_recurrent_state(self, step, fn=None):
         actor = self.recurrent_hidden_states['actor']
@@ -152,6 +164,36 @@ class RolloutStorage(object):
             self.recurrent_hidden_states['actor'][self.step + 1].copy_(self.recurrent_hidden_states['actor'][-1])
             self.recurrent_hidden_states['critic'][self.step + 1].copy_(self.recurrent_hidden_states['critic'][-1])
 
+    def mpi_gather(self, comm):
+        rollouts = gather(comm, self)
+        if rollouts:
+            cat_rollout = RolloutStorage()
+            if not self.is_dict:
+                cat_rollout.obs = torch.cat([ro.obs for ro in rollouts], 1)
+            else:
+                cat_rollout.obs = {k: torch.cat([ro.obs[k] for ro in rollouts], 1) for k in self.obs.keys()}
+
+            cat_rollout.actions = torch.cat([ro.actions for ro in rollouts], 1)
+            cat_rollout.action_log_probs = torch.cat([ro.action_log_probs for ro in rollouts], 1)
+            cat_rollout.value_preds = torch.cat([ro.value_preds for ro in rollouts], 1)
+            cat_rollout.returns = torch.cat([ro.returns for ro in rollouts], 1)
+            cat_rollout.rewards = torch.cat([ro.rewards for ro in rollouts], 1)
+            cat_rollout.masks = torch.cat([ro.masks for ro in rollouts], 1)
+            cat_rollout.bad_masks = torch.cat([ro.bad_masks for ro in rollouts], 1)
+            cat_rollout.has_lstm = self.has_lstm
+            cat_rollout.num_steps = self.num_steps
+            cat_rollout.is_dict = self.is_dict
+
+            if self.has_lstm:
+                for k in self.recurrent_hidden_states:
+                    hs = [ro.recurrent_hidden_states[k][0] for ro in rollouts]
+                    cs = [ro.recurrent_hidden_states[k][1] for ro in rollouts]
+                    cat_rollout.recurrent_hidden_states[k] = torch.cat(hs, 1), torch.cat(cs, 1)
+            else:
+                raise ValueError('GRU not supported')
+            return cat_rollout
+        return None
+
     def compute_returns(self,
                         next_value,
                         use_gae,
@@ -172,6 +214,7 @@ class RolloutStorage(object):
             for step in reversed(range(self.rewards.size(0))):
                 self.returns[step] = self.returns[step + 1] * \
                                      gamma * self.masks[step + 1] + self.rewards[step]
+
     @staticmethod
     def apply_to_dict_obs(obs, fn):
         _out = dict()
@@ -206,8 +249,7 @@ class RolloutStorage(object):
             obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
             recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1].view(
                 -1, self.recurrent_hidden_states.size(-1))[indices]
-            actions_batch = self.actions.view(-1,
-                                              self.actions.size(-1))[indices]
+            actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
             value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
             return_batch = self.returns[:-1].view(-1, 1)[indices]
             masks_batch = self.masks[:-1].view(-1, 1)[indices]
@@ -230,7 +272,7 @@ class RolloutStorage(object):
         num_envs_per_batch = num_processes // num_mini_batch
         perm = torch.randperm(num_processes)
         for start_ind in range(0, num_processes, num_envs_per_batch):
-            obs_batch = dict({k : [] for k in self.obs})
+            obs_batch = dict({k: [] for k in self.obs})
             recurrent_hidden_states_batch = [[], []]
             actions_batch = []
             value_preds_batch = []
