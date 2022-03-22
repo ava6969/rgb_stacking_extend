@@ -171,24 +171,25 @@ class RolloutStorage(object):
             if not self.is_dict:
                 cat_rollout.obs = torch.cat([ro.obs for ro in rollouts], 1).to(device)
             else:
-                cat_rollout.obs = {k: torch.cat([ro.obs[k] for ro in rollouts], 1).to(device) for k in self.obs.keys()}
+                cat_rollout.obs = {k: torch.cat([ro.obs[k].cpu()  for ro in rollouts], 1).to(device) for k in self.obs.keys()}
 
-            cat_rollout.actions = torch.cat([ro.actions for ro in rollouts], 1).to(device)
-            cat_rollout.action_log_probs = torch.cat([ro.action_log_probs for ro in rollouts], 1).to(device)
-            cat_rollout.value_preds = torch.cat([ro.value_preds for ro in rollouts], 1).to(device)
-            cat_rollout.returns = torch.cat([ro.returns for ro in rollouts], 1).to(device)
-            cat_rollout.rewards = torch.cat([ro.rewards for ro in rollouts], 1).to(device)
-            cat_rollout.masks = torch.cat([ro.masks for ro in rollouts], 1).to(device)
-            cat_rollout.bad_masks = torch.cat([ro.bad_masks for ro in rollouts], 1).to(device)
+            cat_rollout.actions = torch.cat([ro.actions.cpu() for ro in rollouts], 1).to(device)
+            cat_rollout.action_log_probs = torch.cat([ro.action_log_probs.cpu()  for ro in rollouts], 1).to(device)
+            cat_rollout.value_preds = torch.cat([ro.value_preds.cpu()  for ro in rollouts], 1).to(device)
+            cat_rollout.returns = torch.cat([ro.returns.cpu()  for ro in rollouts], 1).to(device)
+            cat_rollout.rewards = torch.cat([ro.rewards.cpu()  for ro in rollouts], 1).to(device)
+            cat_rollout.masks = torch.cat([ro.masks.cpu()  for ro in rollouts], 1).to(device)
+            cat_rollout.bad_masks = torch.cat([ro.bad_masks.cpu()  for ro in rollouts], 1).to(device)
             cat_rollout.has_lstm = self.has_lstm
             cat_rollout.num_steps = self.num_steps
             cat_rollout.is_dict = self.is_dict
 
             if self.has_lstm:
                 for k in self.recurrent_hidden_states:
-                    hs = [ro.recurrent_hidden_states[k][0] for ro in rollouts]
-                    cs = [ro.recurrent_hidden_states[k][1] for ro in rollouts]
-                    cat_rollout.recurrent_hidden_states[k] = torch.cat(hs, 1), torch.cat(cs, 1)
+                    hs = [ro.recurrent_hidden_states[k][0].cpu()  for ro in rollouts]
+                    cs = [ro.recurrent_hidden_states[k][1].cpu()  for ro in rollouts]
+                    cat_rollout.recurrent_hidden_states[k] = torch.cat(hs, 1).to(device),\
+                                                             torch.cat(cs, 1).to(device)
             else:
                 raise ValueError('GRU not supported')
             return cat_rollout

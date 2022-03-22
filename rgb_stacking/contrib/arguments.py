@@ -1,5 +1,7 @@
 import argparse
 from dataclasses import dataclass
+import socket
+
 import torch, yaml
 from typing import Dict, List
 
@@ -84,7 +86,8 @@ def get_args(path):
         device_id = proc_id() % n_devices
         args.device = 'cuda:{}'.format(device_id)
         _cuda = torch.cuda.device(args.device)
-        msg('{}\t{}'.format(str(torch.cuda.get_device_properties(_cuda)), str(args.device)))
+        msg('{}, {}\t{}'.format(socket.gethostname(),
+                                str(torch.cuda.get_device_properties(_cuda)), str(args.device)))
 
     if num_procs() > 1:
         args.num_env_steps = args.num_env_steps // num_procs()
