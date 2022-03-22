@@ -1,7 +1,7 @@
 env_name: StackRGBTrain-v1
 
-num_envs_per_cpu: 1
-num_learners: 1
+num_envs_per_cpu: 4
+num_learners: 8
 use_multi_thread: False
 
 device: infer
@@ -27,7 +27,7 @@ save_dir: './benchmark_model/'
 use_proper_time_limits: False
 eval_interval: null
 use_linear_lr_decay: True
-num_mini_batch: 4
+num_mini_batch: 8
 ppo_epoch: 3
 
 model:
