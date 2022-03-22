@@ -164,22 +164,22 @@ class RolloutStorage(object):
             self.recurrent_hidden_states['actor'][self.step + 1].copy_(self.recurrent_hidden_states['actor'][-1])
             self.recurrent_hidden_states['critic'][self.step + 1].copy_(self.recurrent_hidden_states['critic'][-1])
 
-    def mpi_gather(self, comm):
+    def mpi_gather(self, comm, device):
         rollouts = gather(comm, self)
         if rollouts:
             cat_rollout = RolloutStorage()
             if not self.is_dict:
-                cat_rollout.obs = torch.cat([ro.obs for ro in rollouts], 1)
+                cat_rollout.obs = torch.cat([ro.obs for ro in rollouts], 1).to(device)
             else:
-                cat_rollout.obs = {k: torch.cat([ro.obs[k] for ro in rollouts], 1) for k in self.obs.keys()}
+                cat_rollout.obs = {k: torch.cat([ro.obs[k] for ro in rollouts], 1).to(device) for k in self.obs.keys()}
 
-            cat_rollout.actions = torch.cat([ro.actions for ro in rollouts], 1)
-            cat_rollout.action_log_probs = torch.cat([ro.action_log_probs for ro in rollouts], 1)
-            cat_rollout.value_preds = torch.cat([ro.value_preds for ro in rollouts], 1)
-            cat_rollout.returns = torch.cat([ro.returns for ro in rollouts], 1)
-            cat_rollout.rewards = torch.cat([ro.rewards for ro in rollouts], 1)
-            cat_rollout.masks = torch.cat([ro.masks for ro in rollouts], 1)
-            cat_rollout.bad_masks = torch.cat([ro.bad_masks for ro in rollouts], 1)
+            cat_rollout.actions = torch.cat([ro.actions for ro in rollouts], 1).to(device)
+            cat_rollout.action_log_probs = torch.cat([ro.action_log_probs for ro in rollouts], 1).to(device)
+            cat_rollout.value_preds = torch.cat([ro.value_preds for ro in rollouts], 1).to(device)
+            cat_rollout.returns = torch.cat([ro.returns for ro in rollouts], 1).to(device)
+            cat_rollout.rewards = torch.cat([ro.rewards for ro in rollouts], 1).to(device)
+            cat_rollout.masks = torch.cat([ro.masks for ro in rollouts], 1).to(device)
+            cat_rollout.bad_masks = torch.cat([ro.bad_masks for ro in rollouts], 1).to(device)
             cat_rollout.has_lstm = self.has_lstm
             cat_rollout.num_steps = self.num_steps
             cat_rollout.is_dict = self.is_dict

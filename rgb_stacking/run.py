@@ -17,7 +17,6 @@ from rgb_stacking.contrib.envs import make_vec_envs
 from rgb_stacking.contrib.model import Policy
 from rgb_stacking.contrib.storage import RolloutStorage
 from rgb_stacking.a2c_ppo_acktr.evaluation import evaluate
-import logging
 from absl import app
 from absl import flags
 from absl.flags import FLAGS
@@ -25,6 +24,10 @@ from absl.flags import FLAGS
 flags.DEFINE_string('config_path',
                     "/home/ava6969/rgb_stacking_extend/rgb_stacking/contrib/configs/CONFIG_A.yaml",
                     'path to config')
+
+
+def make_eval_envs(main_env):
+    return []
 
 
 def main(argv: Sequence[str]) -> None:
@@ -153,7 +156,8 @@ def main(argv: Sequence[str]) -> None:
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.get_obs(step), rollouts.get_from_recurrent_state(step),
+                    rollouts.get_obs(step),
+                    rollouts.get_from_recurrent_state(step),
                     rollouts.masks[step])
 
             # Obser reward and next obs
@@ -179,7 +183,7 @@ def main(argv: Sequence[str]) -> None:
 
         rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.gae_lambda)
 
-        cat_rollout = rollouts.mpi_gather(rollout_per_learner_comm)
+        cat_rollout = rollouts.mpi_gather(rollout_per_learner_comm, args.device)
 
         actor_critic.train()
 
@@ -227,14 +231,15 @@ def main(argv: Sequence[str]) -> None:
                 writer.add_scalar('Reward/Min', float(np.min(group_episode_rewards)), total_num_steps)
                 writer.add_scalar('Reward/Median', float(np.median(group_episode_rewards)), total_num_steps)
                 writer.add_scalar('Reward/Max', float(np.max(group_episode_rewards)), total_num_steps)
+                writer.add_scalar('Loss/Policy', action_loss, total_num_steps)
+                writer.add_scalar('Loss/Value', value_loss, total_num_steps)
+                writer.add_scalar('Loss/Entropy', dist_entropy, total_num_steps)
                 writer.add_scalar('Timing/FPS', fps, total_num_steps)
 
-            if (args.eval_interval is not None and len(group_episode_rewards) > 1
-                    and j % args.eval_interval == 0):
+            if args.eval_interval is not None and len(group_episode_rewards) > 1 and j % args.eval_interval == 0:
                 obs_rms = utils.get_vec_normalize(envs).obs_rms
-                evaluate(actor_critic, obs_rms, args.env_name, args.seed,
-                         # args.num_processes,
-                         1, eval_log_dir, device)
+                evaluate(actor_critic, obs_rms, make_eval_envs(args.env_name),
+                         args.seed, 5, eval_log_dir, device)
 
             writer.add_scalar('Timing/Updates', j, j)
 

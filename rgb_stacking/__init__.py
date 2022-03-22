@@ -30,8 +30,19 @@ gym.envs.register(
              'obs_preprocess': ObservationPreprocess.ACTOR_BASED,
              'num_discrete_action_bin': ACTION_BIN_sIZE}
 )
+
+gym.envs.register(
+     id='StackRGBTestTripletImage-v0',
+     entry_point='contrib.gym_wrapper:GymWrapper',
+     max_episode_steps=400,
+     kwargs={'object_triplet': 'rgb_test_triplet1',
+             'obs_preprocess': ObservationPreprocess.FLATTEN,
+             'num_discrete_action_bin': ACTION_BIN_sIZE,
+             'add_image': True}
+)
 ''' END StackRGBTestTriplet-v0 '''
 
+''' BEGIN StackRGBTestTriplet-v1 '''
 gym.envs.register(
      id='StackRGBTestTriplet-v1',
      entry_point='contrib.gym_wrapper:GymWrapper',
@@ -60,6 +71,18 @@ gym.envs.register(
 )
 
 gym.envs.register(
+     id='StackRGBTestTripletImage-v1',
+     entry_point='contrib.gym_wrapper:GymWrapper',
+     max_episode_steps=400,
+     kwargs={'object_triplet': 'rgb_test_triplet2',
+             'obs_preprocess': ObservationPreprocess.FLATTEN,
+             'num_discrete_action_bin': ACTION_BIN_sIZE,
+             'add_image': True}
+)
+''' END StackRGBTestTriplet-v1 '''
+
+''' BEGIN StackRGBTestTriplet-v2 '''
+gym.envs.register(
      id='StackRGBTestTriplet-v2',
      entry_point='contrib.gym_wrapper:GymWrapper',
      max_episode_steps=400,
@@ -87,6 +110,17 @@ gym.envs.register(
 )
 
 gym.envs.register(
+     id='StackRGBTestTripletImage-v2',
+     entry_point='contrib.gym_wrapper:GymWrapper',
+     max_episode_steps=400,
+     kwargs={'object_triplet': 'rgb_test_triplet3',
+             'obs_preprocess': ObservationPreprocess.FLATTEN,
+             'num_discrete_action_bin': ACTION_BIN_sIZE,
+             'add_image': True})
+''' END StackRGBTestTriplet-v2 '''
+
+''' BEGIN StackRGBTestTriplet-v3 '''
+gym.envs.register(
      id='StackRGBTestTriplet-v3',
      entry_point='contrib.gym_wrapper:GymWrapper',
      max_episode_steps=400,
@@ -112,7 +146,9 @@ gym.envs.register(
              'obs_preprocess': ObservationPreprocess.ACTOR_BASED,
              'num_discrete_action_bin': ACTION_BIN_sIZE}
 )
+''' END StackRGBTestTriplet-v3 '''
 
+''' BEGIN StackRGBTestTriplet-v4 '''
 gym.envs.register(
      id='StackRGBTestTriplet-v4',
      entry_point='contrib.gym_wrapper:GymWrapper',
@@ -139,7 +175,7 @@ gym.envs.register(
              'obs_preprocess': ObservationPreprocess.ACTOR_BASED,
              'num_discrete_action_bin': ACTION_BIN_sIZE}
 )
-
+''' END StackRGBTestTriplet-v4 '''
 
 gym.envs.register(
      id='StackRGBTrain-v1',
