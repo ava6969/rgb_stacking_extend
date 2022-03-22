@@ -38,7 +38,7 @@ except ImportError:
     pass
 
 
-def make_env(env_id, seed, rank, log_dir):
+def make_env(env_id, seed, rank):
     def _thunk():
         env = gym.make(env_id)
         env.seed(seed + rank)
@@ -46,10 +46,7 @@ def make_env(env_id, seed, rank, log_dir):
         if str(env.__class__.__name__).find('TimeLimit') >= 0:
             env = TimeLimitMask(env)
 
-        if log_dir is not None:
-            env = Monitor(env,
-                          os.path.join(log_dir, str(rank)),
-                          allow_early_resets=False)
+            env = Monitor(env, None, allow_early_resets=False)
         return env
 
     return _thunk
@@ -60,11 +57,10 @@ def make_vec_envs(env_name,
                   num_processes,
                   gamma,
                   device,
-                  log_dir,
                   use_multi_thread):
 
     envs = [
-        make_env(env_name, seed, i, log_dir)
+        make_env(env_name, seed, i)
         for i in range(num_processes)
     ]
 

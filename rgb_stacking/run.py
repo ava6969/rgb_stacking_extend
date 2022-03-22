@@ -52,11 +52,6 @@ def main(argv: Sequence[str]) -> None:
 
     writer = SummaryWriter('runs_{}'.format(proc_id() + 1))
 
-    log_dir = os.path.expanduser(args.log_dir)
-    eval_log_dir = log_dir + "_eval{}".format(proc_id() + 1)
-    utils.cleanup_log_dir(log_dir)
-    utils.cleanup_log_dir(eval_log_dir)
-
     torch.set_num_threads(1)
     device = torch.device(args.device)
 
@@ -65,7 +60,6 @@ def main(argv: Sequence[str]) -> None:
                          args.num_envs_per_cpu,
                          args.gamma,
                          device,
-                         eval_log_dir,
                          args.use_multi_thread)
 
     actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
