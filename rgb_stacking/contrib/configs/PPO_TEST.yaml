@@ -1,7 +1,7 @@
 env_name: StackRGBTrain-v1
 
 num_envs_per_cpu: 1
-num_learners: 8
+num_learners: 4
 use_multi_thread: False
 
 device: infer
