@@ -1,10 +1,12 @@
-import logging
-import os
-
+import mpi4py
+mpi4py.rc.initialize = False
+mpi4py.rc.finalize = True
 from rgb_stacking.utils.mpi_pytorch import sync_params, learner_group, MPI
 from rgb_stacking.utils.mpi_tools import proc_id, num_procs, gather, msg
 
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
+import logging
+import os
+import socket
 from collections import deque
 from typing import Sequence
 from torch.utils.tensorboard import SummaryWriter
@@ -14,7 +16,7 @@ import time
 from rgb_stacking.a2c_ppo_acktr import utils
 from rgb_stacking.contrib import algo
 from rgb_stacking.contrib.arguments import get_args
-from rgb_stacking.contrib.envs import make_vec_envs
+from rgb_stacking.contrib.envs import make_vec_envs, VecPyTorch
 from rgb_stacking.contrib.model import Policy
 from rgb_stacking.contrib.storage import RolloutStorage
 from rgb_stacking.a2c_ppo_acktr.evaluation import evaluate
@@ -37,6 +39,7 @@ def main(argv: Sequence[str]) -> None:
     env = os.environ.copy()
 
     env.update(
+        OPENBLAS_NUM_THREADS="1",
         MKL_NUM_THREADS="1",
         OMP_NUM_THREADS="1",
         IN_MPI="1"
@@ -52,52 +55,51 @@ def main(argv: Sequence[str]) -> None:
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
 
-    if proc_id() == 0:
-        writer = SummaryWriter()
-
     torch.set_num_threads(1)
-    device = torch.device(args.device)
-
     envs = make_vec_envs(args.env_name,
                          args.seed,
                          args.num_envs_per_cpu,
                          args.gamma,
-                         device,
                          args.use_multi_thread)
+
+    MPI.Init()
+    msg('Successfully loaded')
+    if args.device == 'infer':
+        n_devices = torch.cuda.device_count()
+        device_id = proc_id() % n_devices
+        args.device = 'cuda:{}'.format(device_id)
+        _cuda = torch.cuda.device(args.device)
+        msg('{}, {}\t{}'.format(socket.gethostname(),
+                                str(torch.cuda.get_device_properties(_cuda)), str(args.device)))
+
+    device = torch.device(args.device)
+    envs = VecPyTorch(envs, device)
+
+    if num_procs() > 1:
+        args.num_env_steps = args.num_env_steps // num_procs()
+        args.seed += 10000 * proc_id()
+
+    if proc_id() == 0:
+        writer = SummaryWriter()
 
     actor_critic = Policy(envs.observation_space, envs.action_space, args.model)
     actor_critic.to(device)
+    envs.seed(args.seed)
 
     if proc_id() == 0:
         print(actor_critic)
 
-    if args.algo == 'a2c':
-        agent = algo.A2C_ACKTR(
-            actor_critic,
-            args.entropy_coef,
-            args.value_loss_coef,
-            vlr=args.vlr,
-            plr=args.plr,
-            eps=args.eps,
-            alpha=args.alpha,
-            max_grad_norm=args.max_grad_norm)
-
-    elif args.algo == 'ppo':
-        agent = algo.PPO(
-            actor_critic=actor_critic,
-            clip_param=args.clip_param,
-            ppo_epoch=args.ppo_epoch,
-            num_mini_batch=args.num_mini_batch,
-            value_loss_coef=args.value_loss_coef,
-            entropy_coef=args.entropy_coef,
-            vlr=args.vlr,
-            plr=args.plr,
-            eps=args.eps,
-            max_grad_norm=args.max_grad_norm)
-
-    elif args.algo == 'acktr':
-        agent = algo.A2C_ACKTR(
-            actor_critic, args.value_loss_coef, args.entropy_coef, acktr=True)
+    agent = algo.PPO(
+        actor_critic=actor_critic,
+        clip_param=args.clip_param,
+        ppo_epoch=args.ppo_epoch,
+        num_mini_batch=args.num_mini_batch,
+        value_loss_coef=args.value_loss_coef,
+        entropy_coef=args.entropy_coef,
+        vlr=args.vlr,
+        plr=args.plr,
+        eps=args.eps,
+        max_grad_norm=args.max_grad_norm)
 
     rollouts = RolloutStorage(args.num_steps,
                               args.num_envs_per_cpu,
@@ -237,7 +239,7 @@ def main(argv: Sequence[str]) -> None:
             if args.eval_interval is not None and len(group_episode_rewards) > 1 and j % args.eval_interval == 0:
                 obs_rms = utils.get_vec_normalize(envs).obs_rms
                 evaluate(actor_critic, obs_rms, make_eval_envs(args.env_name),
-                         args.seed, 5, eval_log_dir, device)
+                         args.seed, 5, None, device)
 
             writer.add_scalar('Timing/Updates', j, j)
 

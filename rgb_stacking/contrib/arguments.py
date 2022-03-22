@@ -1,11 +1,9 @@
 import argparse
 from dataclasses import dataclass
-import socket
+
 
 import torch, yaml
 from typing import Dict, List
-
-from rgb_stacking.utils.mpi_tools import num_procs, proc_id, msg
 
 @dataclass
 class PolicyOption:
@@ -79,19 +77,6 @@ def get_args(path):
 
     if not args.model.horizon_length:
         args.model.horizon_length = args.num_steps
-
-    msg('Successfully loaded')
-    if args.device == 'infer':
-        n_devices = torch.cuda.device_count()
-        device_id = proc_id() % n_devices
-        args.device = 'cuda:{}'.format(device_id)
-        _cuda = torch.cuda.device(args.device)
-        msg('{}, {}\t{}'.format(socket.gethostname(),
-                                str(torch.cuda.get_device_properties(_cuda)), str(args.device)))
-
-    if num_procs() > 1:
-        args.num_env_steps = args.num_env_steps // num_procs()
-        args.seed += 10000 * proc_id()
 
     if args.num_envs_per_cpu is None:
         args.num_envs_per_cpu = 1
