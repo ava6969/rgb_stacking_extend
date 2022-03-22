@@ -30,9 +30,10 @@ def mpi_avg_grads(module, comm, num_learners):
         return
 
     for p in module.parameters():
-        p_grad_numpy = p.flatten().grad.cpu().numpy()  # numpy view of tensor data
+        grad_shape = p.grad.shape
+        p_grad_numpy = p.grad.flatten().cpu().numpy()  # numpy view of tensor data
         avg_p_grad = mpi_avg(p_grad_numpy, comm)
-        p.grad.data = torch.from_numpy(avg_p_grad).float().to(p.device)
+        p.grad.data = torch.from_numpy(avg_p_grad).view(grad_shape).float().to(p.device)
 
 
 def learner_group(num_learners):
@@ -50,6 +51,7 @@ def sync_params(module):
         return
 
     for p in module.parameters():
+        shape = p.shape
         p_np = p.flatten().cpu().data.numpy()
         broadcast(p_np)
-        p.data = torch.from_numpy(p_np).float().to(p.device)
+        p.data = torch.from_numpy(p_np).view(shape).float().to(p.device)
