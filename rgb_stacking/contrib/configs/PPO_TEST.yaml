@@ -1,8 +1,8 @@
 env_name: StackRGBTrain-v1
 
 num_envs_per_cpu: 4
-num_learners: 4
-use_multi_thread: False
+num_learners: 1
+use_multi_thread: True
 
 device: infer
 algo: ppo

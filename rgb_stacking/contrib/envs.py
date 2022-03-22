@@ -64,7 +64,8 @@ def make_vec_envs(env_name,
         for i in range(num_processes)
     ]
 
-    envs = MultiThreadedVecEnv(envs) if use_multi_thread else DummyVecEnv(envs)
+    # envs = MultiThreadedVecEnv(envs) if use_multi_thread else DummyVecEnv(envs)
+    envs = SubprocVecEnv(envs) if use_multi_thread else DummyVecEnv(envs)
     envs = VecNormalize(envs, gamma=gamma)
     envs = VecPyTorch(envs, device)
 
