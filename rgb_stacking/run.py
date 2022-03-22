@@ -1,3 +1,4 @@
+import logging
 import os
 
 from rgb_stacking.utils.mpi_pytorch import sync_params, learner_group, MPI
@@ -30,6 +31,7 @@ def make_eval_envs(main_env):
     return []
 
 
+logging.disable(logging.CRITICAL)
 def main(argv: Sequence[str]) -> None:
 
     env = os.environ.copy()
@@ -50,7 +52,8 @@ def main(argv: Sequence[str]) -> None:
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
 
-    writer = SummaryWriter('runs_{}'.format(proc_id() + 1))
+    if proc_id() == 0:
+        writer = SummaryWriter()
 
     torch.set_num_threads(1)
     device = torch.device(args.device)
