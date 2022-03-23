@@ -16,22 +16,17 @@ class PPO(A2C_ACKTR):
         self.num_mini_batch = num_mini_batch
         self.use_clipped_value_loss = use_clipped_value_loss
 
-    def update(self, COMM, rollouts, num_learners):
-        advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
-        advantages = (advantages - advantages.mean()) / (
-            advantages.std() + 1e-5)
+    def update(self, COMM, rollouts, num_learners, num_steps):
+        advantages = rollouts.returns - rollouts.value_preds
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-5)
 
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
 
         for e in range(self.ppo_epoch):
-            if self.actor_critic.is_recurrent:
-                data_generator = rollouts.recurrent_generator(
-                    advantages, self.num_mini_batch)
-            else:
-                data_generator = rollouts.feed_forward_generator(
-                    advantages, self.num_mini_batch)
+
+            data_generator = rollouts.recurrent_generator(advantages, self.num_mini_batch, num_steps)
 
             for sample in data_generator:
                 obs_batch, recurrent_hidden_states_batch, actions_batch, \

@@ -90,11 +90,11 @@ class A2C_ACKTR():
             self.update_model(COMM,
                               self.critic_optimizer, value_loss, self.critic, num_learners)
 
-    def update(self, COMM, rollouts, num_learners):
+    def update(self, COMM, rollouts, num_learners, _num_steps):
 
         action_shape = rollouts.actions.size()[-1]
 
-        num_steps, num_processes, _ = rollouts.rewards.size()
+        _, num_processes, _ = rollouts.rewards.size()
 
         values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
             rollouts.get_obs(None, lambda x: x[:-1].view(-1, *(x.size()[2:]))),
@@ -102,8 +102,8 @@ class A2C_ACKTR():
             rollouts.masks[:-1].view(-1, 1),
             rollouts.actions.view(-1, action_shape))
 
-        values = values.view(num_steps, num_processes, 1)
-        action_log_probs = action_log_probs.view(num_steps, num_processes, 1)
+        values = values.view(_num_steps, num_processes, 1)
+        action_log_probs = action_log_probs.view(_num_steps, num_processes, 1)
 
         advantages = rollouts.returns[:-1] - values
         value_loss = advantages.pow(2).mean()

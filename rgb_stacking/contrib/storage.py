@@ -35,10 +35,10 @@ class RolloutStorage(object):
             self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
 
             if action_space.__class__.__name__ == 'Discrete':
-                action_shape = 1
+                self.action_shape = 1
             else:
-                action_shape = action_space.shape[0]
-            self.actions = torch.zeros(num_steps, num_processes, action_shape)
+                self.action_shape = action_space.shape[0]
+            self.actions = torch.zeros(num_steps, num_processes, self.action_shape)
             if action_space.__class__.__name__ == 'Discrete':
                 self.actions = self.actions.long()
 
@@ -51,15 +51,13 @@ class RolloutStorage(object):
 
             if isinstance(obs_space, gym.spaces.Box):
                 self.obs = torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
+                self.ob_shape = obs_space.shape
             else:
                 self.obs = {k: torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
                             for k, obs_space in obs_space.spaces.items()}
+                self.ob_shape = obs_space.spaces
 
             self.masks = torch.ones(num_steps + 1, num_processes, 1)
-
-            # Masks that indicate whether it's a true terminal state
-            # or time limit end state
-            self.bad_masks = torch.ones(num_steps + 1, num_processes, 1)
 
     def clone(self):
         return RolloutStorage(0, 0)
@@ -118,7 +116,6 @@ class RolloutStorage(object):
         self.action_log_probs = self.action_log_probs.to(device)
         self.actions = self.actions.to(device)
         self.masks = self.masks.to(device)
-        self.bad_masks = self.bad_masks.to(device)
 
     def insert(self, obs, recurrent_hidden_states, actions, action_log_probs,
                value_preds, rewards, masks, bad_masks):
@@ -134,7 +131,6 @@ class RolloutStorage(object):
         self.value_preds[self.step].copy_(value_preds)
         self.rewards[self.step].copy_(rewards)
         self.masks[self.step + 1].copy_(masks)
-        self.bad_masks[self.step + 1].copy_(bad_masks)
 
         if self.has_lstm:
             for k in self.recurrent_hidden_states:
@@ -154,7 +150,6 @@ class RolloutStorage(object):
                 self.obs[k][0].copy_(v[-1])
 
         self.masks[0].copy_(self.masks[-1])
-        self.bad_masks[0].copy_(self.bad_masks[-1])
 
         if self.has_lstm:
             for k in self.recurrent_hidden_states:
@@ -164,57 +159,61 @@ class RolloutStorage(object):
             self.recurrent_hidden_states['actor'][self.step + 1].copy_(self.recurrent_hidden_states['actor'][-1])
             self.recurrent_hidden_states['critic'][self.step + 1].copy_(self.recurrent_hidden_states['critic'][-1])
 
-    def mpi_gather(self, comm, device):
+    def mpi_gather(self, comm, num_steps, device):
         rollouts = gather(comm, self)
         if rollouts:
             cat_rollout = RolloutStorage()
-            if not self.is_dict:
-                cat_rollout.obs = torch.cat([ro.obs for ro in rollouts], 1).to(device)
-            else:
-                cat_rollout.obs = {k: torch.cat([ro.obs[k].cpu()  for ro in rollouts], 1).to(device) for k in self.obs.keys()}
 
-            cat_rollout.actions = torch.cat([ro.actions.cpu() for ro in rollouts], 1).to(device)
-            cat_rollout.action_log_probs = torch.cat([ro.action_log_probs.cpu()  for ro in rollouts], 1).to(device)
-            cat_rollout.value_preds = torch.cat([ro.value_preds.cpu()  for ro in rollouts], 1).to(device)
-            cat_rollout.returns = torch.cat([ro.returns.cpu()  for ro in rollouts], 1).to(device)
-            cat_rollout.rewards = torch.cat([ro.rewards.cpu()  for ro in rollouts], 1).to(device)
-            cat_rollout.masks = torch.cat([ro.masks.cpu()  for ro in rollouts], 1).to(device)
-            cat_rollout.bad_masks = torch.cat([ro.bad_masks.cpu()  for ro in rollouts], 1).to(device)
+            cat_rollout.actions = torch.cat([ro.actions.cpu() for ro in rollouts], 1) \
+                .to(device).view(num_steps, -1, self.action_shape)
+            cat_rollout.returns = torch.cat([ro.returns[:-1].cpu() for ro in rollouts], 1) \
+                .to(device).view(num_steps, -1, 1)
+            cat_rollout.rewards = torch.cat([ro.rewards.cpu() for ro in rollouts], 1) \
+                .to(device).view(num_steps, -1, 1)
+
+            batch_sz = cat_rollout.rewards.size(1)
+
+            cat_rollout.obs = {k: torch.cat([ro.obs[k][:-1].cpu() for ro in rollouts], 1)
+                .to(device).view(num_steps, -1, *self.ob_shape[k].shape) for k in self.obs.keys()}
+            cat_rollout.action_log_probs = torch.cat([ro.action_log_probs.cpu() for ro in rollouts], 1) \
+                .to(device).view(num_steps, -1, 1)
+            cat_rollout.value_preds = torch.cat([ro.value_preds[:-1].cpu() for ro in rollouts], 1).to(device) \
+                .to(device).view(num_steps, -1, 1)
+            cat_rollout.masks = torch.cat([ro.masks[:-1].cpu() for ro in rollouts], 1) \
+                .to(device).view(num_steps, -1, 1)
             cat_rollout.has_lstm = self.has_lstm
             cat_rollout.num_steps = self.num_steps
             cat_rollout.is_dict = self.is_dict
 
-            if self.has_lstm:
-                for k in self.recurrent_hidden_states:
-                    hs = [ro.recurrent_hidden_states[k][0].cpu()  for ro in rollouts]
-                    cs = [ro.recurrent_hidden_states[k][1].cpu()  for ro in rollouts]
-                    cat_rollout.recurrent_hidden_states[k] = torch.cat(hs, 1).to(device),\
-                                                             torch.cat(cs, 1).to(device)
-            else:
-                raise ValueError('GRU not supported')
+            for k in self.recurrent_hidden_states:
+                hs = [ro.recurrent_hidden_states[k][0][:-1].cpu() for ro in rollouts]
+                cs = [ro.recurrent_hidden_states[k][1][:-1].cpu() for ro in rollouts]
+                cat_rollout.recurrent_hidden_states[k] = torch.cat(hs, 1).to(device).view(num_steps, batch_sz, -1), \
+                                                         torch.cat(cs, 1).to(device).view(num_steps, batch_sz, -1)
+
             return cat_rollout
         return None
 
     def compute_returns(self,
                         next_value,
-                        use_gae,
                         gamma,
-                        gae_lambda):
-        if use_gae:
-            self.value_preds[-1] = next_value
-            gae = 0
-            for step in reversed(range(self.rewards.size(0))):
-                delta = self.rewards[step] + gamma * self.value_preds[
-                    step + 1] * self.masks[step +
-                                           1] - self.value_preds[step]
-                gae = delta + gamma * gae_lambda * self.masks[step +
-                                                              1] * gae
-                self.returns[step] = gae + self.value_preds[step]
-        else:
-            self.returns[-1] = next_value
-            for step in reversed(range(self.rewards.size(0))):
-                self.returns[step] = self.returns[step + 1] * \
-                                     gamma * self.masks[step + 1] + self.rewards[step]
+                        gae_lambda,
+                        _step,
+                        num_step):
+        offsetFromBack = self.num_steps - _step - 1
+        T = self.rewards.size(0)
+        _end_index = T - offsetFromBack - num_step
+        _start_index = T - offsetFromBack
+
+        self.value_preds[_start_index] = next_value
+        gae = 0
+        for step in reversed(range(_end_index, _start_index)):
+            delta = self.rewards[step] + gamma * self.value_preds[
+                step + 1] * self.masks[step +
+                                       1] - self.value_preds[step]
+            gae = delta + gamma * gae_lambda * self.masks[step +
+                                                          1] * gae
+            self.returns[step] = gae + self.value_preds[step]
 
     @staticmethod
     def apply_to_dict_obs(obs, fn):
@@ -227,44 +226,7 @@ class RolloutStorage(object):
         for k, v in self.obs.items():
             fn(k, v)
 
-    def feed_forward_generator(self,
-                               advantages,
-                               num_mini_batch=None,
-                               mini_batch_size=None):
-        num_steps, num_processes = self.rewards.size()[0:2]
-        batch_size = num_processes * num_steps
-
-        if mini_batch_size is None:
-            assert batch_size >= num_mini_batch, (
-                "PPO requires the number of processes ({}) "
-                "* number of steps ({}) = {} "
-                "to be greater than or equal to the number of PPO mini batches ({})."
-                "".format(num_processes, num_steps, num_processes * num_steps,
-                          num_mini_batch))
-            mini_batch_size = batch_size // num_mini_batch
-        sampler = BatchSampler(
-            SubsetRandomSampler(range(batch_size)),
-            mini_batch_size,
-            drop_last=True)
-        for indices in sampler:
-            obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
-            recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1].view(
-                -1, self.recurrent_hidden_states.size(-1))[indices]
-            actions_batch = self.actions.view(-1, self.actions.size(-1))[indices]
-            value_preds_batch = self.value_preds[:-1].view(-1, 1)[indices]
-            return_batch = self.returns[:-1].view(-1, 1)[indices]
-            masks_batch = self.masks[:-1].view(-1, 1)[indices]
-            old_action_log_probs_batch = self.action_log_probs.view(-1,
-                                                                    1)[indices]
-            if advantages is None:
-                adv_targ = None
-            else:
-                adv_targ = advantages.view(-1, 1)[indices]
-
-            yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                  value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
-
-    def recurrent_generator(self, advantages, num_mini_batch):
+    def recurrent_generator(self, advantages, num_mini_batch, _num_steps):
         num_processes = self.rewards.size(1)
         assert num_processes >= num_mini_batch, (
             "PPO requires the number of processes ({}) "
@@ -284,19 +246,19 @@ class RolloutStorage(object):
 
             for offset in range(num_envs_per_batch):
                 ind = perm[start_ind + offset]
-                self.apply_in_place_to_dict_obs(lambda k, x: obs_batch[k].append(x[:-1, ind]))
+                self.apply_in_place_to_dict_obs(lambda k, x: obs_batch[k].append(x[:, ind]))
                 self.append_recurrent_state(recurrent_hidden_states_batch[0],
                                             recurrent_hidden_states_batch[1],
                                             lambda x: x[0:1, ind])
                 actions_batch.append(self.actions[:, ind])
-                value_preds_batch.append(self.value_preds[:-1, ind])
-                return_batch.append(self.returns[:-1, ind])
-                masks_batch.append(self.masks[:-1, ind])
+                value_preds_batch.append(self.value_preds[:, ind])
+                return_batch.append(self.returns[:, ind])
+                masks_batch.append(self.masks[:, ind])
                 old_action_log_probs_batch.append(
                     self.action_log_probs[:, ind])
                 adv_targ.append(advantages[:, ind])
 
-            T, N = self.num_steps, num_envs_per_batch
+            T, N = _num_steps, num_envs_per_batch
             # These are all tensors of size (T, N, -1)
             obs_batch = self.apply_to_dict_obs(obs_batch, lambda x: torch.stack(x, 1))
             actions_batch = torch.stack(actions_batch, 1)

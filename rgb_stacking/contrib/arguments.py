@@ -39,7 +39,7 @@ class Arg:
     num_envs_per_cpu: int = None
     num_learners: int = 1
     use_multi_thread: bool = False
-
+    num_chunks: int = 1
     num_steps: int = 5
     ppo_epoch: int = 4
     num_mini_batch: int = 32

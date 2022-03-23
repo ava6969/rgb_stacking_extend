@@ -1,4 +1,5 @@
 import mpi4py
+
 mpi4py.rc.initialize = False
 mpi4py.rc.finalize = True
 from rgb_stacking.utils.mpi_pytorch import sync_params, learner_group, MPI
@@ -34,8 +35,9 @@ def make_eval_envs(main_env):
 
 
 logging.disable(logging.CRITICAL)
-def main(argv: Sequence[str]) -> None:
 
+
+def main(argv: Sequence[str]) -> None:
     env = os.environ.copy()
 
     env.update(
@@ -74,6 +76,7 @@ def main(argv: Sequence[str]) -> None:
 
     device = torch.device(args.device)
     envs = VecPyTorch(envs, device)
+    batch_size = int(args.num_steps * args.num_chunks)
 
     if num_procs() > 1:
         args.num_env_steps = args.num_env_steps // num_procs()
@@ -101,7 +104,7 @@ def main(argv: Sequence[str]) -> None:
         eps=args.eps,
         max_grad_norm=args.max_grad_norm)
 
-    rollouts = RolloutStorage(args.num_steps,
+    rollouts = RolloutStorage(batch_size,
                               args.num_envs_per_cpu,
                               envs.observation_space, envs.action_space,
                               args.model.hidden_size,
@@ -152,7 +155,7 @@ def main(argv: Sequence[str]) -> None:
                     writer.add_scalar('LearningRate/Critic', v_lr_, j)
                     writer.add_scalar('LearningRate/Actor', p_lr_, j)
 
-        for step in range(args.num_steps):
+        for step in range(batch_size):
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
@@ -176,19 +179,27 @@ def main(argv: Sequence[str]) -> None:
             rollouts.insert(obs, recurrent_hidden_states, action,
                             action_log_prob, value, reward, masks, bad_masks)
 
-        with torch.no_grad():
-            next_value = actor_critic.get_value(
-                rollouts.get_obs(-1), rollouts.get_from_recurrent_state(-1),
-                rollouts.masks[-1]).detach()
+            if (step + 1) % args.num_steps == 0:
+                with torch.no_grad():
+                    next_value = actor_critic.get_value(
+                        rollouts.get_obs(-1), rollouts.get_from_recurrent_state(-1),
+                        rollouts.masks[-1]).detach()
 
-        rollouts.compute_returns(next_value, args.use_gae, args.gamma, args.gae_lambda)
+                rollouts.compute_returns(next_value,
+                                         args.gamma,
+                                         args.gae_lambda,
+                                         step,
+                                         args.num_steps)
 
-        cat_rollout = rollouts.mpi_gather(rollout_per_learner_comm, args.device)
+        cat_rollout = rollouts.mpi_gather(rollout_per_learner_comm,
+                                          args.num_steps,
+                                          args.device)
 
         actor_critic.train()
 
         if cat_rollout is not None:
-            value_loss, action_loss, dist_entropy = agent.update(avg_grad_comm, cat_rollout, args.num_learners)
+            value_loss, action_loss, dist_entropy = agent.update(avg_grad_comm, cat_rollout,
+                                                                 args.num_learners, args.num_steps)
 
         rollouts.after_update()
 
@@ -224,8 +235,7 @@ def main(argv: Sequence[str]) -> None:
                                                              len(group_episode_rewards), np.mean(group_episode_rewards),
                                                              np.median(group_episode_rewards),
                                                              np.min(group_episode_rewards),
-                                                             np.max(group_episode_rewards), dist_entropy, value_loss,
-                                                             action_loss))
+                                                             np.max(group_episode_rewards)))
 
                 writer.add_scalar('Reward/Mean', float(np.mean(group_episode_rewards)), total_num_steps)
                 writer.add_scalar('Reward/Min', float(np.min(group_episode_rewards)), total_num_steps)
