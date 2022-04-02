@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from rgb_stacking.a2c_ppo_acktr.utils import init
+from rgb_stacking.utils.utils import init
 
 
 class Flatten(nn.Module):

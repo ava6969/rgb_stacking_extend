@@ -3,8 +3,8 @@ import os
 # workaround to unpickle olf model files
 
 import torch
-from rgb_stacking.contrib.envs import make_vec_envs
-from rgb_stacking.a2c_ppo_acktr.utils import get_render_func, get_vec_normalize
+from rgb_stacking.contrib.envs import make_vec_envs, VecPyTorch
+from rgb_stacking.utils.utils import get_render_func, get_vec_normalize
 
 # sys.path.append('a2c_ppo_acktr')
 
@@ -34,52 +34,54 @@ args = parser.parse_args()
 
 args.det = not args.non_det
 
-env = make_vec_envs(
-    args.env_name,
-    args.seed + 1000,
-    1,
-    None,
-    None,
-    device='cpu',
-    allow_early_resets=False)
-
-# Get a render function
-render_func = get_render_func(env)
-
 # We need to use the same statistics for normalization as used in training
 actor_critic, obs_rms = \
-            torch.load(os.path.join(args.load_dir, args.env_name + ".pt"),
-                        map_location='cpu')
+    torch.load(os.path.join(args.load_dir, args.env_name + ".pt"),
+               map_location='cpu')
 
-vec_norm = get_vec_normalize(env)
-if vec_norm is not None:
-    vec_norm.eval()
-    vec_norm.obs_rms = obs_rms
-
-recurrent_hidden_states = actor_critic.zero_state(1, "lstm")
-masks = torch.zeros(1, 1)
 print(actor_critic)
-obs = env.reset()
 
-if render_func is not None:
-    screen = render_func('rgbarray')
+envs = ['StackRGBTestTriplet-v{}'.format(i) for i in range(5)]
+for env_name in envs:
+    env = VecPyTorch(make_vec_envs(
+        env_name,
+        args.seed + 1000,
+        1,
+        None,
+        False), device='cpu')
 
-returns = 0
-while True:
-    with torch.no_grad():
-        value, action, _, recurrent_hidden_states = actor_critic.act(
-            obs, recurrent_hidden_states, masks, deterministic=args.det)
+    # Get a render function
+    render_func = get_render_func(env)
 
-    # Obser reward and next obs
-    obs, reward, done, _ = env.step(action)
-    returns += reward
-    masks.fill_(0.0 if done else 1.0)
+    vec_norm = get_vec_normalize(env)
+    if vec_norm is not None:
+        vec_norm.eval()
+        vec_norm.obs_rms = obs_rms
+
+    recurrent_hidden_states = actor_critic.zero_state(1, "lstm")
+    masks = torch.zeros(1, 1)
+
+    obs = env.reset()
 
     if render_func is not None:
-        render_func('human')
+        screen = render_func('rgbarray')
 
-    if done:
-        break
+    returns = 0
+    while True:
+        with torch.no_grad():
+            value, action, _, recurrent_hidden_states = actor_critic.act(
+                obs, recurrent_hidden_states, masks, deterministic=args.det)
 
-print('Total Returns: ', returns)
-env.close()
+        # Obser reward and next obs
+        obs, reward, done, _ = env.step(action)
+        returns += reward
+        masks.fill_(0.0 if done else 1.0)
+
+        if render_func is not None:
+            render_func('human')
+
+        if done:
+            break
+
+    print('Total Returns: ', returns)
+    env.close()

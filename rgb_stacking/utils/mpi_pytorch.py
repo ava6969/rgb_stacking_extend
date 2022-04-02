@@ -36,11 +36,13 @@ def mpi_avg_grads(module, comm, num_learners):
 
 
 def learner_group(num_learners):
-    rollout_per_learner_group = MPI.COMM_WORLD.Split(proc_id() % num_learners, proc_id())
+    rollout_root = proc_id() % num_learners
+    rollout_per_learner_group = MPI.COMM_WORLD.Split(rollout_root, proc_id())
 
     learner_ranks = [r for r in range(num_learners)]
     if proc_id() < num_learners:
         return MPI.COMM_WORLD.Create_group(MPI.COMM_WORLD.group.Incl(learner_ranks)), rollout_per_learner_group
+
     return None, rollout_per_learner_group
 
 

@@ -1,13 +1,12 @@
 import enum
-from abc import ABC
-from typing import Dict, Sequence, Optional
+from typing import Dict, Sequence
 
 import cv2
 import gym
 import numpy
 import numpy as np
 
-from rgb_stacking import environment
+from rgb_stacking.utils import environment
 
 
 def flatten_dict(obs: Dict, keys):

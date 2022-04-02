@@ -1,14 +1,11 @@
 from typing import Dict
 
-import numpy as np
-import torch
-
 from rgb_stacking.contrib.relational_net import ResidualSelfAttention, ResidualSelfAttentionCell
-from rgb_stacking.contrib.vision_net import NatureNet, RelationalImpalaResnet, RobotImageResnetModule
+from rgb_stacking.contrib.vision_net import RobotImageResnetModule
 from rgb_stacking.contrib.recurrent_net import RecurrentNet
 from rgb_stacking.contrib.arguments import PolicyOption
 import gym
-from rgb_stacking.a2c_ppo_acktr.distributions import DiagGaussian, MultiCategorical, Categorical
+from rgb_stacking.utils.distributions import DiagGaussian, MultiCategorical, Categorical
 from rgb_stacking.contrib.common import *
 
 

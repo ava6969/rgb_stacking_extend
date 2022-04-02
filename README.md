@@ -133,9 +133,10 @@ the paper). If you wish to use a different triplet you can use the following
 commands:
 
    ```python
-   from rgb_stacking import environment
 
-   env = environment.rgb_stacking(object_triplet=NAME_OF_TRIPLET)
+from rgb_stacking.utils import environment
+
+env = environment.rgb_stacking(object_triplet=NAME_OF_TRIPLET)
    ```
 
 The possible `NAME_OF_TRIPLET` are:
@@ -155,9 +156,10 @@ used for training our state-based agents. To use another set of observations
 please use the following code snippet:
 
    ```python
-   from rgb_stacking import environment
 
-   env = environment.rgb_stacking(
+from rgb_stacking.utils import environment
+
+env = environment.rgb_stacking(
     observations=environment.ObservationSet.CHOSEN_SET)
    ```
 

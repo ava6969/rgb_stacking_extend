@@ -1,6 +1,8 @@
 import mpi4py
+
 mpi4py.rc.initialize = False
 mpi4py.rc.finalize = True
+
 from rgb_stacking.utils.mpi_pytorch import sync_params, learner_group, MPI
 from rgb_stacking.utils.mpi_tools import proc_id, num_procs, gather, msg
 
@@ -13,20 +15,19 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import torch
 import time
-from rgb_stacking.a2c_ppo_acktr import utils
+from rgb_stacking.utils import utils
 from rgb_stacking.contrib import algo
 from rgb_stacking.contrib.arguments import get_args
 from rgb_stacking.contrib.envs import make_vec_envs, VecPyTorch
 from rgb_stacking.contrib.model import Policy
 from rgb_stacking.contrib.storage import RolloutStorage
-from rgb_stacking.a2c_ppo_acktr.evaluation import evaluate
+from rgb_stacking.utils.evaluation import evaluate
 from absl import app
 from absl import flags
 from absl.flags import FLAGS
 
-flags.DEFINE_string('config_path',
-                    "/home/ava6969/rgb_stacking_extend/rgb_stacking/contrib/configs/CONFIG_A.yaml",
-                    'path to config')
+
+flags.DEFINE_string('config_path', "", 'path to config')
 
 
 def make_eval_envs(main_env):
@@ -34,8 +35,9 @@ def make_eval_envs(main_env):
 
 
 logging.disable(logging.CRITICAL)
-def main(argv: Sequence[str]) -> None:
 
+
+def main(argv: Sequence[str]) -> None:
     env = os.environ.copy()
 
     env.update(
@@ -107,12 +109,13 @@ def main(argv: Sequence[str]) -> None:
                               args.model.hidden_size,
                               args.model.rec_type)
 
-    avg_grad_comm, rollout_per_learner_comm = learner_group(args.num_learners)
+    avg_grad_comm, rollout_per_learner_comm, _root = learner_group(args.num_learners)
     msg('avg_grad_group(rank={}, size={}), '
-        'rollout_per_learner_group(rank={}, size={})'.format(avg_grad_comm.rank if avg_grad_comm else 'null',
-                                                             avg_grad_comm.size if avg_grad_comm else 'null',
-                                                             rollout_per_learner_comm.rank if rollout_per_learner_comm else 'null',
-                                                             rollout_per_learner_comm.size if rollout_per_learner_comm else 'null'))
+        'rollout_per_learner_group(rank={}, size={})'
+        .format(avg_grad_comm.rank if avg_grad_comm else 'null',
+                avg_grad_comm.size if avg_grad_comm else 'null',
+                rollout_per_learner_comm.rank if rollout_per_learner_comm else 'null',
+                rollout_per_learner_comm.size if rollout_per_learner_comm else 'null'))
 
     obs = envs.reset()
 
