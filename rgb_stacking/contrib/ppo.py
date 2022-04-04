@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,19 +10,18 @@ from rgb_stacking.utils.mpi_pytorch import mpi_avg_grads
 class PPO:
 
     def __init__(self, actor_critic, clip_param, ppo_epoch, num_mini_batch, entropy_coef,
-                 value_loss_coef=None, vlr=None, plr=None, eps=None, max_grad_norm=None):
+                 vlr=None, plr=None, eps=None, max_grad_norm=None):
 
         self.actor = actor_critic.actor
         self.critic = actor_critic.critic
         self.actor_critic = actor_critic
 
-        self.vf_coef = value_loss_coef
         self.entropy_coef = entropy_coef
 
         self.max_grad_norm = max_grad_norm
 
-        self.actor_optimizer = optim.Adam(self.actor_critic.parameters(), plr, eps=eps)
-        self.critic_optimizer = optim.Adam(self.actor_critic.parameters(), vlr, eps=eps)
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), plr, eps=eps)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), vlr, eps=eps)
 
         self.clip_param = clip_param
         self.ppo_epoch = ppo_epoch
@@ -49,6 +49,7 @@ class PPO:
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        kls = []
 
         for e in range(self.ppo_epoch):
             data_generator = rollouts.recurrent_generator(advantages, self.num_mini_batch)
@@ -67,8 +68,15 @@ class PPO:
                 surr1 = ratio * adv_targ
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
                 action_loss = - torch.min(surr1, surr2).mean()
+                kls.append((old_action_log_probs_batch - action_log_probs).mean().item())
 
-                value_loss = 0.5 * (return_batch - values).pow(2).mean()
+                value_pred_clipped = value_preds_batch + \
+                                     (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
+                value_losses = (values - return_batch).pow(2)
+                value_losses_clipped = (
+                        value_pred_clipped - return_batch).pow(2)
+                value_loss = 0.5 * torch.max(value_losses,
+                                             value_losses_clipped).mean()
 
                 self.update_actor_critic(COMM, action_loss, value_loss, dist_entropy, num_learners)
 
@@ -82,4 +90,4 @@ class PPO:
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, float(np.mean(kls))

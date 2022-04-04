@@ -6,6 +6,7 @@ dm-reverb-nightly
 opencv-python
 typing-extensions
 
+absl
 mpi4py
 numpy
 gym

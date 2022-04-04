@@ -29,7 +29,7 @@ source "${TMP_DIR}/rgb_stacking/bin/activate"
 pip install --upgrade -r requirements.txt
 
 # Run the visualization of the environment.
-python -m rgb_stacking.main
+python -m rgb_stacking.run
 
 # Clean up.
 rm -r ${TMP_DIR}

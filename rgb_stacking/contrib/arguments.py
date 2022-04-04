@@ -1,7 +1,5 @@
 import argparse
 from dataclasses import dataclass
-
-
 import torch, yaml
 from typing import Dict, List
 
@@ -21,25 +19,20 @@ class PolicyOption:
 @dataclass
 class Arg:
     model: PolicyOption = None
-    algo: str = 'a2c'
     plr: float = 7e-4
     vlr: float = 1e-4
     alpha: float = 0.99
     gamma: float = 0.99
     eps: float = 1e-5
-    use_gae: bool = False
     gae_lambda: float = 0.95
     entropy_coef: float = 0.01
-    value_loss_coef: float = 0.5
     max_grad_norm: float = 0.5
     seed: int = 1
     cuda_deterministic: bool = False
     device: str = 'cuda:0'
-
     num_envs_per_cpu: int = None
     num_learners: int = 1
     use_multi_thread: bool = False
-
     num_steps: int = 5
     ppo_epoch: int = 4
     num_mini_batch: int = 32
@@ -51,10 +44,7 @@ class Arg:
     log_dir = '/tmp/gym/'
     save_dir = './trained_models/'
     recurrent_policy: str = None
-    no_cuda: bool = True
-    use_proper_time_limits: bool = False
     eval_interval: int = None
-    use_linear_lr_decay: bool = False
 
 
 def parse_model(yaml_entry):
@@ -80,10 +70,5 @@ def get_args(path):
 
     if args.num_envs_per_cpu is None:
         args.num_envs_per_cpu = 1
-
-    assert args.algo in ['a2c', 'ppo', 'acktr']
-    if args.recurrent_policy is not None:
-        assert args.algo in ['a2c', 'ppo'], \
-            'Recurrent policy is not implemented for ACKTR'
 
     return args

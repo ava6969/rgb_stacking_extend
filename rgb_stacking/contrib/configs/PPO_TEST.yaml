@@ -4,59 +4,32 @@ num_envs_per_cpu: 32
 num_learners: 1
 use_multi_thread: True
 
-device: infer
-algo: ppo
+device: cpu
+seed: 1
+log_interval: 100
+save_interval: 100
+num_env_steps: 1.0e+7
+log_dir: '/tmp/gym/'
+save_dir: './benchmark_model/'
+eval_interval: null
+
 plr: 7.0e-4
 vlr: 7.0e-4
 alpha: 0.99
 gamma: 0.99
 eps: 1.0e-5
-use_gae: True
+max_grad_norm: 0.5
+
 gae_lambda: 0.95
 entropy_coef: 0.01
-value_loss_coef: null
-max_grad_norm: 0.5
-seed: 1
-cuda_deterministic: False
-num_steps: 10
-log_interval: 10
-save_interval: 100
-num_env_steps: 1.0e+7
-log_dir: '/tmp/gym/'
-save_dir: './benchmark_model/'
-use_proper_time_limits: False
-eval_interval: null
-use_linear_lr_decay: True
 num_mini_batch: 8
 ppo_epoch: 3
+num_steps: 10
 
 model:
-  rec_type: lstm
   hidden_size: 512
 
   feature_extract:
     vision_out: 512
     flatten_out: 512
     act_fn: relu
-
-  policy_keys: &1 ['action/environment',
-  'gripper/grasp',
-  'gripper/joints/angle',
-  'gripper/joints/velocity',
-  'rgb30_blue/abs_pose',
-  'rgb30_blue/to_pinch',
-  'rgb30_green/abs_pose',
-  'rgb30_green/to_pinch',
-  'rgb30_red/abs_pose',
-  'rgb30_red/to_pinch',
-  'sawyer/joints/angle',
-  'sawyer/joints/torque',
-  'sawyer/joints/velocity',
-  'sawyer/pinch/pose',
-  'sawyer/tcp/pose',
-  'sawyer/tcp/velocity',
-  'wrist/force',
-  'wrist/torque']
-
-  value_keys: *1
-

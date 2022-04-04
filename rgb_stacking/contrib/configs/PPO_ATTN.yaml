@@ -1,4 +1,4 @@
-env_name: StackRGBTrain-v1
+env_name: StackRGBTrain-v2
 
 num_envs_per_cpu: 64
 num_learners: 1
@@ -30,6 +30,9 @@ model:
   hidden_size: 512
 
   feature_extract:
-    vision_out: 512
-    flatten_out: 512
+    embed_out: 256
     act_fn: relu
+    post: attn
+    heads: 4
+    attn_embed_dim: 256
+    max_pool_out: False
