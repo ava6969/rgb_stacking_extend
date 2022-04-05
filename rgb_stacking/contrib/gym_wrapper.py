@@ -122,6 +122,7 @@ class GymWrapper(gym.Env):
 
         self.domain_random = domain_random
 
+
         GymWrapper.ACTION_BIN_SIZE = num_discrete_action_bin
         self.env = environment.rgb_stacking(object_triplet=object_triplet,
                                             observation_set=environment.ObservationSet.ALL if add_image

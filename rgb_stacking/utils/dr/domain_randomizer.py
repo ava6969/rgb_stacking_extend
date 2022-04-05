@@ -15,7 +15,7 @@ class DomainRandomizer(base_initializer.Initializer):
         self.arm = robot.arm
         self.gripper = robot.gripper
 
-        friction, mass, low, hi = np.array([0.9, 0.001, 0.001], float), 0.201, 0.9, 1.1
+        friction, mass, low, hi = np.array([1, 0.005, 0.0001], float), 0.201, 0.9, 1.1
         self.object_rand = dict(friction=Uniform(friction * low, friction * hi),
                                 mass=Uniform(mass * low, mass * hi))
 
@@ -27,15 +27,15 @@ class DomainRandomizer(base_initializer.Initializer):
 
         friction = np.array([1, 0.005, 0.0001], float)
         self.hand_rand = dict(friction=Uniform(friction * low, friction * hi),
-                              driver_damping=Uniform(0.1 * low, 0.1 * hi),
-                              armature=Uniform(low, hi),
-                              spring_link_damping=Uniform(0.3 * low, 0.3 * hi))
+                              driver_damping=Uniform(0.2 * low, 0.2 * hi),
+                              armature=Uniform(0.1 * low, 0.1 * hi),
+                              spring_link_damping=Uniform(0.00125 * low, 0.00125 * hi))
 
         friction = np.array([1.0, 0.001, 0.001], float)
         self.basket_friction = Uniform(friction * low, friction * hi)
 
-        friction = np.array([1, 0, 0, 0, 0, 0], float)
-        self.actuator_gear = Uniform(friction * low, friction * hi)
+        gear_ratio = np.array([1, 0, 0, 0, 0, 0], float)
+        self.actuator_gear = Uniform(gear_ratio * low, gear_ratio * hi)
 
     def __call__(self, physics: mjcf.Physics, random_state: np.random.RandomState) -> bool:
         for p in self.props:
