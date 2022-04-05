@@ -117,12 +117,16 @@ class GymWrapper(gym.Env):
     def __init__(self, object_triplet,
                  obs_preprocess=ObservationPreprocess.FLATTEN,
                  num_discrete_action_bin: int = None,
-                 add_image=False):
+                 add_image=False,
+                 domain_random=False):
+
+        self.domain_random = domain_random
 
         GymWrapper.ACTION_BIN_SIZE = num_discrete_action_bin
         self.env = environment.rgb_stacking(object_triplet=object_triplet,
                                             observation_set=environment.ObservationSet.ALL if add_image
                                             else environment.ObservationSet.STATE_ONLY)
+
         self.add_image = add_image
         self.obs_preprocess = obs_preprocess
 
@@ -160,12 +164,12 @@ class GymWrapper(gym.Env):
         return base
 
     def reset(self):
-    #     success_obs = None
-    #     while not success_obs:
-    #         try:
-        success_obs = self.env.reset()
-            # except Exception:
-            #     success_obs = None
+        success_obs = None
+        while not success_obs:
+            try:
+                success_obs = self.env.reset()
+            except Exception as e:
+                success_obs = None
 
         return self._observation(success_obs.observation)
 

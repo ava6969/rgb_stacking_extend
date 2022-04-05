@@ -51,8 +51,8 @@ _ACTION_OBS_STACK_DEPTH = 2
 _MAX_STEPS = 400
 
 # Timestep of the physics simulation.
-# _PHYSICS_TIMESTEP = 0.005
 _PHYSICS_TIMESTEP = 0.0005
+# _PHYSICS_TIMESTEP = 0.002
 
 _STATE_OBSERVATIONS = (
     'action/environment',
