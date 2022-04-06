@@ -1,12 +1,12 @@
 env_name: StackRGBTrain-v2
 
-num_envs_per_cpu: 64
+num_envs_per_cpu: 128
 num_learners: 1
 use_multi_thread: True
 
 device: infer
 seed: 1
-log_interval: 10
+log_interval: 50
 save_interval: 100
 num_env_steps: 1.0e+9
 log_dir: '/tmp/gym/'
