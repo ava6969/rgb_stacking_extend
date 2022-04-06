@@ -1,6 +1,6 @@
 env_name: StackRGBTrain-v2
 
-num_envs_per_cpu: 128
+num_envs_per_cpu: 64
 num_learners: 1
 use_multi_thread: True
 
