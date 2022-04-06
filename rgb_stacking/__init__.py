@@ -2,6 +2,7 @@ import gym
 from rgb_stacking.contrib.gym_wrapper import ObservationPreprocess
 import mpi4py
 
+ROOT = 10
 mpi4py.rc.initialize = False
 mpi4py.rc.finalize = True
 

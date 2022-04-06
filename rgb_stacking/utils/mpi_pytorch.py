@@ -5,6 +5,8 @@ import numpy as np
 import os
 import torch
 from mpi4py import MPI
+
+from rgb_stacking import ROOT
 from rgb_stacking.utils.mpi_tools import broadcast, mpi_avg, num_procs, proc_id
 
 
@@ -52,5 +54,5 @@ def sync_params(module):
         return
     for p in module.parameters():
         p_np = p.cpu().data.numpy()
-        broadcast(p_np)
+        broadcast(p_np, ROOT)
         p.data = torch.from_numpy(p_np).float().to(p.device)

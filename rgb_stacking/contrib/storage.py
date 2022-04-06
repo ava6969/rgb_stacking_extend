@@ -5,6 +5,7 @@ import torch
 import numpy as np
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
+from rgb_stacking import ROOT
 from rgb_stacking.utils.mpi_tools import gather
 
 
@@ -128,7 +129,7 @@ class RolloutStorage(object):
                                 torch.cat([ro.__getattribute__(attr).cpu() for ro in rollouts], 1).to(device))
 
     def mpi_gather(self, comm, device):
-        rollouts = gather(comm, self)
+        rollouts = gather(comm, self, ROOT)
         if rollouts:
             cat_rollout = RolloutStorage()
 
