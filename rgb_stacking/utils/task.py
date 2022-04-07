@@ -159,8 +159,7 @@ def rgb_task(red_obj_id: str,
 
     # Initializers to place the TCP and the props in the basket.
     dynamic_initializer = entity_initializer.TaskEntitiesInitializer(
-        [_gripper_initializer(robot), _prop_initializers(props),
-         domain_randomizer.DomainRandomizer(basket, props, robot)])
+        [_gripper_initializer(robot), _prop_initializers(props)])
 
     moma_task = base_task.BaseTask(
         task_name='rgb_stacking',
@@ -169,7 +168,7 @@ def rgb_task(red_obj_id: str,
         props=props,
         extra_sensors=extra_sensors,
         extra_effectors=[],
-        scene_initializer=lambda _: None,
+        scene_initializer=domain_randomizer.DomainRandomizer(basket, props, robot),
         episode_initializer=dynamic_initializer,
         control_timestep=_CONTROL_TIMESTEP)
     return moma_task

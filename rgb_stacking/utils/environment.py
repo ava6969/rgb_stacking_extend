@@ -93,7 +93,6 @@ _INTERACTIVE_IMITATION_LEARNING_OBSERVATIONS = (
     'basket_front_right/pixels'
 )
 
-
 # For the one-step offline policy improvement from real data, the vision-based
 # policy used the following proprioception and images observations from the pair
 # of front cameras given by the real environment.
@@ -105,38 +104,38 @@ _OFFLINE_POLICY_IMPROVEMENT_OBSERVATIONS = [
     'gripper/joints/velocity',
     'sawyer/pinch/pose',
     'basket_front_left/pixels',
-    'basket_front_right/pixels',]
+    'basket_front_right/pixels', ]
 
 
 class ObservationSet(int, enum.Enum):
-  """Different possible set of observations that can be exposed."""
+    """Different possible set of observations that can be exposed."""
 
-  _observations: Sequence[str]
+    _observations: Sequence[str]
 
-  def __new__(cls, value: int, observations: Sequence[str]):
-    obj = int.__new__(cls, value)
-    obj._value_ = value
-    obj._observations = observations
-    return obj
+    def __new__(cls, value: int, observations: Sequence[str]):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        obj._observations = observations
+        return obj
 
-  @property
-  def observations(self):
-    return self._observations
+    @property
+    def observations(self):
+        return self._observations
 
-  STATE_ONLY = (0, _STATE_OBSERVATIONS)
-  VISION_ONLY = (1, _VISION_OBSERVATIONS)
-  ALL = (2, _STATE_OBSERVATIONS + _VISION_OBSERVATIONS)
-  INTERACTIVE_IMITATION_LEARNING = (
-      3, _INTERACTIVE_IMITATION_LEARNING_OBSERVATIONS)
-  OFFLINE_POLICY_IMPROVEMENT = (4, _OFFLINE_POLICY_IMPROVEMENT_OBSERVATIONS)
+    STATE_ONLY = (0, _STATE_OBSERVATIONS)
+    VISION_ONLY = (1, _VISION_OBSERVATIONS)
+    ALL = (2, _STATE_OBSERVATIONS + _VISION_OBSERVATIONS)
+    INTERACTIVE_IMITATION_LEARNING = (
+        3, _INTERACTIVE_IMITATION_LEARNING_OBSERVATIONS)
+    OFFLINE_POLICY_IMPROVEMENT = (4, _OFFLINE_POLICY_IMPROVEMENT_OBSERVATIONS)
 
 
 def rgb_stacking(
-    object_triplet: str = 'rgb_test_random',
-    observation_set: ObservationSet = ObservationSet.STATE_ONLY,
-    use_sparse_reward: bool = False
+        object_triplet: str = 'rgb_test_random',
+        observation_set: ObservationSet = ObservationSet.STATE_ONLY,
+        use_sparse_reward: bool = False,
 ) -> subtask_env.SubTaskEnvironment:
-  """Returns the environment.
+    """Returns the environment.
 
   The relevant groups can be found here:
   https://github.com/deepmind/robotics/blob/main/py/manipulation/props/rgb_objects/rgb_object.py
@@ -150,148 +149,149 @@ def rgb_stacking(
       stacked and not touching the robot, and 0 otherwise.
   """
 
-  red_id, green_id, blue_id = rgb_object.PROP_TRIPLETS[object_triplet][1]
-  rgb_task = task.rgb_task(red_id, green_id, blue_id)
-  rgb_task.physics_timestep = _PHYSICS_TIMESTEP
+    red_id, green_id, blue_id = rgb_object.PROP_TRIPLETS[object_triplet][1]
+    rgb_task = task.rgb_task(red_id, green_id, blue_id)
+    rgb_task.physics_timestep = _PHYSICS_TIMESTEP
 
-  # To speed up simulation we ensure that mujoco will no check contact between
-  # geoms that cannot collide.
-  mujoco_collisions.exclude_bodies_based_on_contype_conaffinity(
-      rgb_task.root_entity.mjcf_model)
+    # To speed up simulation we ensure that mujoco will no check contact between
+    # geoms that cannot collide.
+    mujoco_collisions.exclude_bodies_based_on_contype_conaffinity(
+        rgb_task.root_entity.mjcf_model)
 
-  # Build the agent flow subtask. This is where the task logic is defined,
-  # observations, and rewards.
-  env_builder = subtask_env_builder.SubtaskEnvBuilder()
-  env_builder.set_task(rgb_task)
-  task_env = env_builder.build_base_env()
+    # Build the agent flow subtask. This is where the task logic is defined,
+    # observations, and rewards.
+    env_builder = subtask_env_builder.SubtaskEnvBuilder()
+    env_builder.set_task(rgb_task)
+    task_env = env_builder.build_base_env()
 
-  # Define the action space, this is used to expose the actuators used in the
-  # base task.
-  effectors_action_spec = rgb_task.effectors_action_spec(
-      physics=task_env.physics)
-  robot_action_spaces = []
-  for rbt in rgb_task.robots:
-    arm_action_space = action_spaces.ArmJointActionSpace(
-        af.prefix_slicer(effectors_action_spec, rbt.arm_effector.prefix))
-    gripper_action_space = action_spaces.GripperActionSpace(
-        af.prefix_slicer(effectors_action_spec, rbt.gripper_effector.prefix))
-    robot_action_spaces.extend([arm_action_space, gripper_action_space])
+    # Define the action space, this is used to expose the actuators used in the
+    # base task.
+    effectors_action_spec = rgb_task.effectors_action_spec(
+        physics=task_env.physics)
+    robot_action_spaces = []
+    for rbt in rgb_task.robots:
+        arm_action_space = action_spaces.ArmJointActionSpace(
+            af.prefix_slicer(effectors_action_spec, rbt.arm_effector.prefix))
+        gripper_action_space = action_spaces.GripperActionSpace(
+            af.prefix_slicer(effectors_action_spec, rbt.gripper_effector.prefix))
+        robot_action_spaces.extend([arm_action_space, gripper_action_space])
 
-  composite_action_space = af.CompositeActionSpace(
-      robot_action_spaces)
-  env_builder.set_action_space(composite_action_space)
+    composite_action_space = af.CompositeActionSpace(
+        robot_action_spaces)
+    env_builder.set_action_space(composite_action_space)
 
-  # Cast all the floating point observations to float32.
-  env_builder.add_preprocessor(
-      observation_transforms.DowncastFloatPreprocessor(np.float32))
+    # Cast all the floating point observations to float32.
+    env_builder.add_preprocessor(
+        observation_transforms.DowncastFloatPreprocessor(np.float32))
 
-  # Concatenate the TCP and wrist site observations.
-  env_builder.add_preprocessor(observation_transforms.MergeObservations(
-      obs_to_merge=['robot0_tcp_pos', 'robot0_tcp_quat'],
-      new_obs='robot0_tcp_pose'))
-  env_builder.add_preprocessor(observation_transforms.MergeObservations(
-      obs_to_merge=['robot0_wrist_site_pos', 'robot0_wrist_site_quat'],
-      new_obs='robot0_wrist_site_pose'))
+    # Concatenate the TCP and wrist site observations.
+    env_builder.add_preprocessor(observation_transforms.MergeObservations(
+        obs_to_merge=['robot0_tcp_pos', 'robot0_tcp_quat'],
+        new_obs='robot0_tcp_pose'))
+    env_builder.add_preprocessor(observation_transforms.MergeObservations(
+        obs_to_merge=['robot0_wrist_site_pos', 'robot0_wrist_site_quat'],
+        new_obs='robot0_wrist_site_pose'))
 
-  # Add in observations to measure the distance from the TCP to the objects.
-  for color in ('red', 'green', 'blue'):
-    env_builder.add_preprocessor(observation_transforms.AddObservation(
-        obs_name=f'{color}_to_pinch',
-        obs_callable=_distance_delta_obs(
-            f'rgb_object_{color}_pose', 'robot0_tcp_pose')))
+    # Add in observations to measure the distance from the TCP to the objects.
+    for color in ('red', 'green', 'blue'):
+        env_builder.add_preprocessor(observation_transforms.AddObservation(
+            obs_name=f'{color}_to_pinch',
+            obs_callable=_distance_delta_obs(
+                f'rgb_object_{color}_pose', 'robot0_tcp_pose')))
 
-  # Concatenate the action sent to the robot joints and the gripper actuator.
-  env_builder.add_preprocessor(observation_transforms.MergeObservations(
-      obs_to_merge=['robot0_arm_joint_previous_action',
-                    'robot0_gripper_previous_action'],
-      new_obs='robot0_previous_action'))
+    # Concatenate the action sent to the robot joints and the gripper actuator.
+    env_builder.add_preprocessor(observation_transforms.MergeObservations(
+        obs_to_merge=['robot0_arm_joint_previous_action',
+                      'robot0_gripper_previous_action'],
+        new_obs='robot0_previous_action'))
 
-  # Mapping of observation names to match the observation names in the stored
-  # data.
-  obs_mapping = {
-      'robot0_arm_joint_pos': 'sawyer/joints/angle',
-      'robot0_arm_joint_vel': 'sawyer/joints/velocity',
-      'robot0_arm_joint_torques': 'sawyer/joints/torque',
-      'robot0_tcp_pose': 'sawyer/pinch/pose',
-      'robot0_wrist_site_pose': 'sawyer/tcp/pose',
-      'robot0_wrist_site_vel_world': 'sawyer/tcp/velocity',
-      'robot0_gripper_pos': 'gripper/joints/angle',
-      'robot0_gripper_vel': 'gripper/joints/velocity',
-      'robot0_gripper_grasp': 'gripper/grasp',
-      'robot0_wrist_force': 'wrist/force',
-      'robot0_wrist_torque': 'wrist/torque',
-      'rgb_object_red_pose': 'rgb30_red/abs_pose',
-      'rgb_object_green_pose': 'rgb30_green/abs_pose',
-      'rgb_object_blue_pose': 'rgb30_blue/abs_pose',
-      'basket_back_left_rgb_img': 'basket_back_left/pixels',
-      'basket_front_left_rgb_img': 'basket_front_left/pixels',
-      'basket_front_right_rgb_img': 'basket_front_right/pixels',
-      'red_to_pinch': 'rgb30_red/to_pinch',
-      'blue_to_pinch': 'rgb30_blue/to_pinch',
-      'green_to_pinch': 'rgb30_green/to_pinch',
-      'robot0_previous_action': 'action/environment',
-      }
+    # Mapping of observation names to match the observation names in the stored
+    # data.
+    obs_mapping = {
+        'robot0_arm_joint_pos': 'sawyer/joints/angle',
+        'robot0_arm_joint_vel': 'sawyer/joints/velocity',
+        'robot0_arm_joint_torques': 'sawyer/joints/torque',
+        'robot0_tcp_pose': 'sawyer/pinch/pose',
+        'robot0_wrist_site_pose': 'sawyer/tcp/pose',
+        'robot0_wrist_site_vel_world': 'sawyer/tcp/velocity',
+        'robot0_gripper_pos': 'gripper/joints/angle',
+        'robot0_gripper_vel': 'gripper/joints/velocity',
+        'robot0_gripper_grasp': 'gripper/grasp',
+        'robot0_wrist_force': 'wrist/force',
+        'robot0_wrist_torque': 'wrist/torque',
+        'rgb_object_red_pose': 'rgb30_red/abs_pose',
+        'rgb_object_green_pose': 'rgb30_green/abs_pose',
+        'rgb_object_blue_pose': 'rgb30_blue/abs_pose',
+        'basket_back_left_rgb_img': 'basket_back_left/pixels',
+        'basket_front_left_rgb_img': 'basket_front_left/pixels',
+        'basket_front_right_rgb_img': 'basket_front_right/pixels',
+        'red_to_pinch': 'rgb30_red/to_pinch',
+        'blue_to_pinch': 'rgb30_blue/to_pinch',
+        'green_to_pinch': 'rgb30_green/to_pinch',
+        'robot0_previous_action': 'action/environment',
+    }
 
-  # Create different subsets of observations.
-  action_obs = {'action/environment'}
+    # Create different subsets of observations.
+    action_obs = {'action/environment'}
 
-  # These observations only have a single floating point value instead of an
-  # array.
-  single_value_obs = {'gripper/joints/angle',
-                      'gripper/joints/velocity',
-                      'gripper/grasp'}
+    # These observations only have a single floating point value instead of an
+    # array.
+    single_value_obs = {'gripper/joints/angle',
+                        'gripper/joints/velocity',
+                        'gripper/grasp'}
 
-  # Rename observations.
-  env_builder.add_preprocessor(observation_transforms.RenameObservations(
-      obs_mapping, raise_on_missing=False))
+    # Rename observations.
+    env_builder.add_preprocessor(observation_transforms.RenameObservations(
+        obs_mapping, raise_on_missing=False))
 
-  if use_sparse_reward:
-    reward_fn = stack_rewards.get_sparse_reward_fn(
-        top_object=rgb_task.props[0],
-        bottom_object=rgb_task.props[2],
-        get_physics_fn=lambda: task_env.physics)
-  else:
-    reward_fn = stack_rewards.get_shaped_stacking_reward()
-  env_builder.add_preprocessor(reward_functions.RewardPreprocessor(reward_fn))
+    if use_sparse_reward:
+        reward_fn = stack_rewards.get_sparse_reward_fn(
+            top_object=rgb_task.props[0],
+            bottom_object=rgb_task.props[2],
+            get_physics_fn=lambda: task_env.physics)
+    else:
+        reward_fn = stack_rewards.get_shaped_stacking_reward()
+    env_builder.add_preprocessor(reward_functions.RewardPreprocessor(reward_fn))
 
-  # We concatenate several observations from consecutive timesteps. Depending
-  # on the observations, we will concatenate a different number of observations.
-  # - Most observations are stacked 3 times
-  # - Camera observations are not stacked.
-  # - The action observation is stacked twice.
-  # - When stacking three scalar (i.e. numpy array of shape (1,)) observations,
-  #   we do not add a leading dimension, so the final shape is (3,).
-  env_builder.add_preprocessor(
-      observation_transforms.StackObservations(
-          obs_to_stack=list(
-              set(_STATE_OBSERVATIONS) - action_obs - single_value_obs),
-          stack_depth=_OBSERVATION_STACK_DEPTH,
-          add_leading_dim=True))
-  env_builder.add_preprocessor(
-      observation_transforms.StackObservations(
-          obs_to_stack=list(single_value_obs),
-          stack_depth=_OBSERVATION_STACK_DEPTH,
-          add_leading_dim=False))
-  env_builder.add_preprocessor(
-      observation_transforms.StackObservations(
-          obs_to_stack=list(action_obs),
-          stack_depth=_ACTION_OBS_STACK_DEPTH,
-          add_leading_dim=True))
+    # We concatenate several observations from consecutive timesteps. Depending
+    # on the observations, we will concatenate a different number of observations.
+    # - Most observations are stacked 3 times
+    # - Camera observations are not stacked.
+    # - The action observation is stacked twice.
+    # - When stacking three scalar (i.e. numpy array of shape (1,)) observations,
+    #   we do not add a leading dimension, so the final shape is (3,).
+    env_builder.add_preprocessor(
+        observation_transforms.StackObservations(
+            obs_to_stack=list(
+                set(_STATE_OBSERVATIONS) - action_obs - single_value_obs),
+            stack_depth=_OBSERVATION_STACK_DEPTH,
+            add_leading_dim=True))
+    env_builder.add_preprocessor(
+        observation_transforms.StackObservations(
+            obs_to_stack=list(single_value_obs),
+            stack_depth=_OBSERVATION_STACK_DEPTH,
+            add_leading_dim=False))
+    env_builder.add_preprocessor(
+        observation_transforms.StackObservations(
+            obs_to_stack=list(action_obs),
+            stack_depth=_ACTION_OBS_STACK_DEPTH,
+            add_leading_dim=True))
 
-  # Only keep the obseravtions that we want to expose to the agent.
-  env_builder.add_preprocessor(observation_transforms.RetainObservations(
-      observation_set.observations, raise_on_missing=False))
+    # Only keep the obseravtions that we want to expose to the agent.
+    env_builder.add_preprocessor(observation_transforms.RetainObservations(
+        observation_set.observations, raise_on_missing=False))
 
-  # End episodes after 400 steps.
-  env_builder.add_preprocessor(
-      subtask_termination.MaxStepsTermination(_MAX_STEPS))
+    # End episodes after 400 steps.
+    env_builder.add_preprocessor(
+        subtask_termination.MaxStepsTermination(_MAX_STEPS))
 
-  return env_builder.build()
+    return env_builder.build()
 
 
 def _distance_delta_obs(key1: str, key2: str):
-  """Returns a callable that returns the difference between two observations."""
-  def util(timestep: tsp.PreprocessorTimestep) -> np.ndarray:
-    return timestep.observation[key1] - timestep.observation[key2]
-  return util
+    """Returns a callable that returns the difference between two observations."""
 
+    def util(timestep: tsp.PreprocessorTimestep) -> np.ndarray:
+        return timestep.observation[key1] - timestep.observation[key2]
+
+    return util
