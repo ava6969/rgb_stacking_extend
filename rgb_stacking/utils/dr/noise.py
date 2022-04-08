@@ -3,7 +3,7 @@ from gym.utils import seeding
 
 
 class NoiseDistribution:
-    def __init__(self, name, seed=1):
+    def __init__(self, name, seed=None):
         self.name = name
         self._np_random = None
         self._np_random, self.seed = seeding.np_random(seed)
@@ -13,7 +13,7 @@ class NoiseDistribution:
 
 
 class Normal(NoiseDistribution):
-    def __init__(self, loc, scale, seed=1):
+    def __init__(self, loc, scale, seed=None):
         super().__init__('normal', seed)
         self.loc = loc
         self.scale = scale
@@ -23,8 +23,15 @@ class Normal(NoiseDistribution):
 
 
 class Uniform(NoiseDistribution):
-    def __init__(self, low, hi, seed=1):
+    def __init__(self, low, hi, seed=None):
         super().__init__('normal', seed)
+
+        if not( isinstance(low, int) or isinstance(low, float) ):
+            for i , (l, h) in enumerate( zip(low, hi) ):
+                if l > h:
+                    low[i] = h
+                    hi[i] = l
+
         self.low = low
         self.hi = hi
 
@@ -33,7 +40,7 @@ class Uniform(NoiseDistribution):
 
 
 class LogUniform(NoiseDistribution):
-    def __init__(self, low, hi, seed=1):
+    def __init__(self, low, hi, seed=None):
         super().__init__('normal', seed)
         self.low = low
         self.hi = hi

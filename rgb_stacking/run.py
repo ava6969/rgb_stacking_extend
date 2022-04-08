@@ -33,6 +33,7 @@ def init_env():
         OMP_NUM_THREADS="1",
         IN_MPI="1"
     )
+    return env
 
 
 def _seed(args):
