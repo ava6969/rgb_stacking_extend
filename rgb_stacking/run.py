@@ -118,7 +118,7 @@ def run(args, envs, policy, agent, rollouts, writer, device, rollout_per_learner
             bad_masks = torch.FloatTensor(
                 [[0.0] if 'bad_transition' in info.keys() else [1.0]
                  for info in infos])
-            rollouts.insert(obs, recurrent_hidden_states, action,
+            rollouts.insert(obs, recurrent_hidden_states, _ACTION_OBS_STACK_DEPTH_ACTION_OBS_STACK_DEPTHaction,
                             action_log_prob, value, reward, masks, bad_masks)
 
         with torch.no_grad():
@@ -200,6 +200,7 @@ def main(argv: Sequence[str]) -> None:
     args = get_args(FLAGS.config_path)
 
     _seed(args)
+
 
     envs = make_vec_envs(args.env_name,
                          args.seed,

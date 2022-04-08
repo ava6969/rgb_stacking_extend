@@ -8,6 +8,7 @@ mpi4py.rc.finalize = True
 
 ACTION_BIN_sIZE = 11
 
+
 ''' BEGIN StackRGBTestTriplet-v0 '''
 gym.envs.register(
      id='StackRGBTestTriplet-v0',

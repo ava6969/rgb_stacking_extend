@@ -1,5 +1,7 @@
 import argparse
+import os
 import pickle
+from collections import defaultdict
 
 import mpi4py as mp
 import argparse as ap
@@ -14,6 +16,7 @@ from rgb_stacking.utils.dr.noise import Uniform, LogUniform
 from rgb_stacking.utils.mpi_tools import proc_id, num_procs, gather, msg
 import colorsys
 from scipy.spatial.transform import Rotation as R
+import pandas as pd
 
 '''
 TODO:
@@ -21,15 +24,17 @@ TODO:
 '''
 
 _POLICY_PATHS = lambda path: f'rgb_stacking/utils/assets/saved_models/mpo_state_{path}'
-
+KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
+        'bX', 'bY', 'bZ', 'bQ1', 'bQ2', 'bQ3', 'bQ4',
+        'gX', 'gY', 'gZ', 'gQ1', 'gQ2', 'gQ3', 'gQ4']
 
 def to_example(rank, policy, env, obs, _debug):
     images = {'bl': obs['basket_back_left/pixels'],
               'fl': obs['basket_front_left/pixels'],
               'fr': obs['basket_front_right/pixels']}
-    poses = {'r': obs['rgb30_red/abs_pose'],
-             'b': obs['rgb30_blue/abs_pose'],
-             'g': obs['rgb30_green/abs_pose']}
+    poses = list(obs['rgb30_red/abs_pose'][-1]) + \
+            list(obs['rgb30_blue/abs_pose'][-1]) + \
+            list(obs['rgb30_green/abs_pose'][-1])
 
     if _debug:
         for k in ['bl', 'fl', 'fr']:
@@ -99,7 +104,7 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
         b = Uniform([200/255, 0.5 , 0.5 ], [270/360, 1 , 1 ])
 
         t_acquired = 0
-        sampler = Uniform([0.0, 0.0, 0.0, 0, 0, 0], [1, 1, 0.3, 0, 0, 0])
+        sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 1, 0.0, 0.0, 0.0, 0.0])
         while t_acquired < total_frames:
 
             timestep = env.reset()
@@ -131,10 +136,10 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                 # _cam.quat = get_quaternion_from_euler( *camera_right_euler.sample() )
 
                 if np.random.rand() > 0.5:
-                    x = 0.99 ** t * force[:3]
-                    env.physics.bind(props[0]).xfrc_applied[:3] = np.random.normal(x, mass).clip(min=0)
-                    env.physics.bind(props[1]).xfrc_applied[:3] = np.random.normal(x, mass).clip(min=0)
-                    env.physics.bind(props[2]).xfrc_applied[:3] = np.random.normal(x, mass).clip(min=0)
+                    x = 0.99 ** t * force
+                    env.physics.bind(props[0]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
+                    env.physics.bind(props[1]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
+                    env.physics.bind(props[2]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
 
                 (action, _), state = policy.step(timestep, state)
                 timestep = env.step(action)
@@ -146,10 +151,9 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                 if t_acquired % 100 == 0:
                     total = mp.MPI.COMM_WORLD.allreduce(t_acquired)
                     if proc_id() == 0:
-                        print('Total Frames Acquired: [', total, f'/{TOTAL_F}] frames')
+                        _str = f'Total Frames Acquired: [ {total}/{TOTAL_F}] frames'
+                        msg(_str)
                 t += 1
-
-
 
     return frames
 
@@ -167,16 +171,32 @@ if __name__ == '__main__':
     rank = proc_id()
     sz = num_procs()
 
-    frames_per_expert = args.total_frames // sz
+    if rank == 0:
+        if not os.path.exists('rgb_stacking/data'):
+            os.mkdir('rgb_stacking/data')
+            os.mkdir('rgb_stacking/data/images')
+
+    split = 10
+    frames_per_expert = args.total_frames // sz // split
     assert frames_per_expert > 0
+    j = 0
 
-    # Run inference on CPU
-    with tf.device('/cpu:0'):
-        total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
-                           frames_per_expert,
-                           _POLICY_PATHS( triplet( rank // 5 ) ),
-                           args.debug, args.total_frames)
+    for i in range(split):
+        # Run inference on CPU
+        with tf.device('/cpu:0'):
+            total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
+                               frames_per_expert,
+                               _POLICY_PATHS( triplet( rank // 5 ) ),
+                               args.debug, args.total_frames)
 
-    with open('rgb_stacking/data/rgb_example_{}.pkl'.format(rank), 'wb') as file:
-        pickle.dump(total_frames, file)
-
+        _dict = defaultdict(lambda: list())
+        for img, pose in total_frames:
+            cv2.imwrite('rgb_stacking/data/images/IMG_bl_{}_{}.png'.format(j, rank), img['bl'])
+            cv2.imwrite('rgb_stacking/data/images/IMG_fl_{}_{}.png'.format(j, rank), img['fl'])
+            cv2.imwrite('rgb_stacking/data/images/IMG_fr_{}_{}.png'.format(j, rank), img['fr'])
+            for i, k in enumerate(KEYS):
+                _dict[k].append( pose[i] )
+            _dict['id'].append(j)
+            j += 1
+        pd.DataFrame(_dict).to_csv(f'rgb_stacking/data/data_batch_{i}_{rank}.csv')
+        msg('saved batch {}'.format(i))
