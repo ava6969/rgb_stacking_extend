@@ -3,13 +3,13 @@ import os
 import pickle
 from collections import defaultdict
 
+import mpi4py
 import mpi4py as mp
 import argparse as ap
 import cv2
 import torch.cuda
 import tqdm, sys
 import tensorflow as tf
-from rgb_stacking.run import _mpi_init, init_env
 from rgb_stacking.utils import environment, policy_loading
 from dm_robotics.manipulation.props.rgb_objects import rgb_object
 import numpy as np
@@ -44,6 +44,19 @@ def to_example(rank, policy, env, obs, _debug):
 
     return images, poses
 
+def init_env():
+    env = os.environ.copy()
+    env.update(
+        OPENBLAS_NUM_THREADS="1",
+        MKL_NUM_THREADS="1",
+        OMP_NUM_THREADS="1",
+        IN_MPI="1"
+    )
+    return env
+
+def _mpi_init():
+    mpi4py.MPI.Init()
+    msg('Successfully loaded')
 
 def get_range(x, pct):
     lo = [x_* (1-pct) for x_ in x]
