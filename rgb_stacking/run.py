@@ -51,6 +51,8 @@ def _mpi_init():
 def to_device(args, envs):
     if args.device == 'infer':
         n_devices = torch.cuda.device_count()
+        print('N=',n_devices)
+        print('i=', proc_id())
         device_id = proc_id() % n_devices
         args.device = 'cuda:{}'.format(device_id)
         _cuda = torch.cuda.device(args.device)
