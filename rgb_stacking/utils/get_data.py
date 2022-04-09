@@ -1,3 +1,6 @@
+import rgb_stacking
+rgb_stacking.LOAD_GYM = False
+
 import argparse
 import os
 from collections import defaultdict
@@ -9,7 +12,7 @@ import tensorflow as tf
 from rgb_stacking.utils import environment, policy_loading
 from dm_robotics.manipulation.props.rgb_objects import rgb_object
 import numpy as np
-from rgb_stacking.utils.dr import Uniform
+from rgb_stacking.utils.dr.noise import Uniform
 from rgb_stacking.utils.mpi_tools import proc_id, num_procs, msg
 import colorsys
 import pandas as pd
