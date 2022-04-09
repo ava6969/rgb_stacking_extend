@@ -58,7 +58,7 @@ from dm_robotics.moma.sensors import robot_tcp_sensor
 from dm_robotics.moma.sensors import robot_wrist_ft_sensor
 from dm_robotics.moma.sensors import robotiq_gripper_sensor
 from dm_robotics.moma.sensors import site_sensor
-from rgb_stacking.dr import domain_randomizer
+from rgb_stacking.utils.dr import domain_randomizer
 import numpy as np
 
 # Margin from the joint limits at which to stop the Z rotation when using 4D

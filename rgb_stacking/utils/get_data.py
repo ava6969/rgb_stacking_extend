@@ -6,12 +6,11 @@ import mpi4py
 import mpi4py as mp
 import cv2
 import tensorflow as tf
-from rgb_stacking import policy_loading
-from rgb_stacking import environment
+from rgb_stacking.utils import environment, policy_loading
 from dm_robotics.manipulation.props.rgb_objects import rgb_object
 import numpy as np
-from rgb_stacking.dr.noise import Uniform
-from rgb_stacking.mpi_tools import proc_id, num_procs, msg
+from rgb_stacking.utils.dr import Uniform
+from rgb_stacking.utils.mpi_tools import proc_id, num_procs, msg
 import colorsys
 import pandas as pd
 

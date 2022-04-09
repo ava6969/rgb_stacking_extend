@@ -2,7 +2,7 @@ import torch
 from mpi4py import MPI
 
 from rgb_stacking import ROOT
-from rgb_stacking.mpi_tools import broadcast, mpi_avg, num_procs, proc_id
+from rgb_stacking.utils.mpi_tools import broadcast, mpi_avg, num_procs, proc_id
 
 
 def setup_pytorch_for_mpi():

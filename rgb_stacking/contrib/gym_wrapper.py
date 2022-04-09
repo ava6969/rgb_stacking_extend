@@ -6,13 +6,9 @@ import gym
 import numpy
 import numpy as np
 
-from rgb_stacking import environment
+from rgb_stacking.contrib import ObservationPreprocess
+from rgb_stacking.utils import environment
 
-
-class ObservationPreprocess(enum.Enum):
-    RAW_DICT = 1
-    FLATTEN = 2
-    ACTOR_BASED = 3
 
 
 NUM_OF_JOINTS_ON_ARMS = 7

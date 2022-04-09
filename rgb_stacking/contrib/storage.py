@@ -4,7 +4,7 @@ import gym
 import torch
 
 from rgb_stacking import ROOT
-from rgb_stacking.mpi_tools import gather
+from rgb_stacking.utils.mpi_tools import gather
 
 
 def _flatten_helper(T, N, _tensor):

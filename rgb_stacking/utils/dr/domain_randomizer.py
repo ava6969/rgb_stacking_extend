@@ -1,6 +1,6 @@
 import dataclasses
 
-from rgb_stacking.dr.noise import Uniform
+from rgb_stacking.utils.dr.noise import Uniform
 import numpy as np
 
 
