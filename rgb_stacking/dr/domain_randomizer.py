@@ -1,8 +1,6 @@
 import dataclasses
 
-from dm_control import mjcf
-
-from rgb_stacking.utils.dr.noise import NoiseDistribution, Normal, LogUniform, Uniform
+from rgb_stacking.dr.noise import Uniform
 import numpy as np
 
 

@@ -1,5 +1,5 @@
 from rgb_stacking.utils.mpi_pytorch import sync_params, learner_group, MPI
-from rgb_stacking.utils.mpi_tools import proc_id, num_procs, gather, msg
+from rgb_stacking.mpi_tools import proc_id, num_procs, gather, msg
 import logging
 import os
 import socket

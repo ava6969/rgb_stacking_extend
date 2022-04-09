@@ -1,12 +1,10 @@
-from typing import Dict, List
+from typing import List
 
 import gym
 import torch
-import numpy as np
-from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
 from rgb_stacking import ROOT
-from rgb_stacking.utils.mpi_tools import gather
+from rgb_stacking.mpi_tools import gather
 
 
 def _flatten_helper(T, N, _tensor):

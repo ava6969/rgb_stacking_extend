@@ -1,26 +1,11 @@
-import os
 from collections import OrderedDict
-from copy import deepcopy
-from typing import Union, Dict, List, Callable
-import threading
 import gym
-import numpy as np
 import torch
-from gym.spaces.box import Box
-from gym.wrappers.clip_action import ClipAction
-from stable_baselines3.common.atari_wrappers import (ClipRewardEnv,
-                                                     EpisodicLifeEnv,
-                                                     FireResetEnv,
-                                                     MaxAndSkipEnv,
-                                                     NoopResetEnv, WarpFrame)
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import (DummyVecEnv, SubprocVecEnv,
                                               VecEnvWrapper)
-from stable_baselines3.common.vec_env.base_vec_env import VecEnvStepReturn
 from stable_baselines3.common.vec_env.vec_normalize import \
     VecNormalize as VecNormalize_
-
-from rgb_stacking.utils.mpi_tools import msg
 
 try:
     import dmc2gym

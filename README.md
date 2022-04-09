@@ -134,7 +134,7 @@ commands:
 
    ```python
 
-from rgb_stacking.utils import environment
+from rgb_stacking import environment
 
 env = environment.rgb_stacking(object_triplet=NAME_OF_TRIPLET)
    ```

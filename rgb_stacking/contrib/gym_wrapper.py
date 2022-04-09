@@ -6,7 +6,7 @@ import gym
 import numpy
 import numpy as np
 
-from rgb_stacking.utils import environment
+from rgb_stacking import environment
 
 
 class ObservationPreprocess(enum.Enum):

@@ -26,7 +26,8 @@ from dm_robotics.manipulation.props.rgb_objects import rgb_object
 from dm_robotics.moma import subtask_env
 import numpy as np
 
-from rgb_stacking.utils import policy_loading, environment
+from rgb_stacking.utils import policy_loading
+from rgb_stacking import environment
 
 _TEST_OBJECT_TRIPLETS = tuple(rgb_object.PROP_TRIPLETS_TEST.keys())
 
