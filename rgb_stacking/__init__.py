@@ -1,16 +1,8 @@
-
-
-ROOT = 0
+from rgb_stacking.contrib.gym_wrapper import ObservationPreprocess
 import gym
 import mpi4py, enum
 
-
-class ObservationPreprocess(enum.Enum):
-    RAW_DICT = 1
-    FLATTEN = 2
-    ACTOR_BASED = 3
-
-
+ROOT = 0
 mpi4py.rc.initialize = False
 mpi4py.rc.finalize = True
 ACTION_BIN_sIZE = 11
