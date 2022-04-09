@@ -6,6 +6,7 @@ from collections import defaultdict
 import mpi4py as mp
 import argparse as ap
 import cv2
+import torch.cuda
 import tqdm, sys
 import tensorflow as tf
 from rgb_stacking.run import _mpi_init, init_env
@@ -166,7 +167,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     env = init_env()
-    env['CUDA_VISIBLE_DEVICES']=0
+    gpus = tf.config.list_physical_devices('GPU')
+    print("Num GPUs Available: ", len(gpus))
     _mpi_init()
     rank = proc_id()
     sz = num_procs()
@@ -181,9 +183,15 @@ if __name__ == '__main__':
     assert frames_per_expert > 0
     j = 0
 
+    k = rank % len(gpus)
+    device = gpus[k]
+    tf.config.set_visible_devices(device, 'GPU')
+    logical_gpus = tf.config.list_logical_devices('GPU')
+    msg( f'{len(gpus)} Physical GPUs, {len(logical_gpus)} Logical GPU' )
+
     for i in range(split):
         # Run inference on CPU
-        with tf.device('/cpu:0'):
+        with tf.device('/cpu'):
             total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
                                frames_per_expert,
                                _POLICY_PATHS( triplet( rank // 5 ) ),
