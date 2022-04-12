@@ -38,9 +38,10 @@ def to_example(rank, policy, env, obs, _debug):
     if _debug:
         for k in ['bl', 'fl', 'fr']:
             cv2.imshow( '{}:{}:P{}:E{}'.format(k, rank, policy, env), images[k])
-        cv2.waitKey(1)
+        cv2.waitKey(10)
 
     return images, poses
+
 
 def init_env():
     env = os.environ.copy()
@@ -105,9 +106,12 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
         diffuse = get_range_single(0.6, 3, 0.1)
 
         camera = env.base_env.task.root_entity.mjcf_model.find_all('camera')[1:4]
+
         camera_left_pos = get_range([1, -0.395, 0.253], 0.1)
         # camera_left_euler = get_range([1.142, 0.004, 0.783], 0.05)
         camera_right_pos = get_range([0.967, 0.381, 0.261], 0.1)
+
+        camera_back = get_range([0.06, -0.26, 0.39], 0.1)
         # camera_right_euler = get_range([1.088, 0.001, 2.362], 0.05)
         camera_fov = Uniform(30, 40)
 
@@ -116,7 +120,7 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
         b = Uniform([200/255, 0.5 , 0.5 ], [270/360, 1 , 1 ])
 
         t_acquired = 0
-        sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 1, 0.0, 0.0, 0.0, 0.0])
+        sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 0, 1, 1.0, 0.0, 1.0])
         while t_acquired < total_frames:
 
             timestep = env.reset()
@@ -138,14 +142,18 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                 _light.diffuse = diffuse.sample()
 
                 _cam = env.physics.bind(camera[0])
-                _cam.pos = camera_left_pos.sample()
+                # _cam.pos = camera_left_pos.sample()
                 _cam.fovy = camera_fov.sample()
                 # _cam.quat = get_quaternion_from_euler( *camera_left_euler.sample() )
 
                 _cam = env.physics.bind(camera[1])
-                _cam.pos = camera_right_pos.sample()
+                # _cam.pos = camera_right_pos.sample()
                 _cam.fovy = camera_fov.sample()
                 # _cam.quat = get_quaternion_from_euler( *camera_right_euler.sample() )
+
+                _cam = env.physics.bind(camera[2])
+                # _cam.pos = camera_back.sample()
+                _cam.fovy = camera_fov.sample()
 
                 if np.random.rand() > 0.5:
                     x = 0.99 ** t * force
@@ -189,16 +197,10 @@ if __name__ == '__main__':
             os.mkdir('rgb_stacking/data')
             os.mkdir('rgb_stacking/data/images')
 
-    split = 10
+    split = 100
     frames_per_expert = args.total_frames // sz // split
     assert frames_per_expert > 0
     j = 0
-
-    k = rank % len(gpus)
-    device = gpus[k]
-    tf.config.set_visible_devices(device, 'GPU')
-    logical_gpus = tf.config.list_logical_devices('GPU')
-    msg( f'{len(gpus)} Physical GPUs, {len(logical_gpus)} Logical GPU' )
 
     for i in range(split):
         # Run inference on CPU
