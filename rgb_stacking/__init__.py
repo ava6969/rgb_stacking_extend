@@ -1,3 +1,5 @@
+raw_input = input
+
 from rgb_stacking.contrib.gym_wrapper import ObservationPreprocess
 import gym
 import mpi4py, enum

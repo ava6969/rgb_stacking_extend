@@ -1,4 +1,6 @@
 import pickle, glob
+
+import tqdm
 from PIL import Image
 from torch.utils.data import Dataset
 import torch
@@ -23,11 +25,12 @@ class CustomDataset(Dataset):
         label = torch.from_numpy( pose ).float()
         return images, label
 
-def load_data(parent_path):
+def load_data(parent_path, sz=None):
     dfs = glob.glob(parent_path + '/data/*csv')
+    dfs = dfs if sz is None else dfs[:sz]
     batch = []
 
-    for df_file in dfs:
+    for df_file in tqdm.tqdm(dfs[:sz]):
         df = pd.read_csv(df_file)
         rank = df_file.split('/')[-1][:-4].split('_')[-1]
         for i, id in enumerate(df['id']):

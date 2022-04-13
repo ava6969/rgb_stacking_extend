@@ -142,17 +142,17 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                 _light.diffuse = diffuse.sample()
 
                 _cam = env.physics.bind(camera[0])
-                # _cam.pos = camera_left_pos.sample()
+                _cam.pos = camera_left_pos.sample()
                 _cam.fovy = camera_fov.sample()
                 # _cam.quat = get_quaternion_from_euler( *camera_left_euler.sample() )
 
                 _cam = env.physics.bind(camera[1])
-                # _cam.pos = camera_right_pos.sample()
+                _cam.pos = camera_right_pos.sample()
                 _cam.fovy = camera_fov.sample()
                 # _cam.quat = get_quaternion_from_euler( *camera_right_euler.sample() )
 
                 _cam = env.physics.bind(camera[2])
-                # _cam.pos = camera_back.sample()
+                _cam.pos = camera_back.sample()
                 _cam.fovy = camera_fov.sample()
 
                 if np.random.rand() > 0.5:
@@ -182,32 +182,36 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('Data Collection')
     parser.add_argument('-f', '--total_frames', type=int)
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-r', '--rank', type=int)
+    parser.add_argument('-s', '--split', type=int)
     triplet = lambda x: tuple(rgb_object.PROP_TRIPLETS_TEST.keys())[x]
     args = parser.parse_args()
+    j = 0
 
-    env = init_env()
-    gpus = tf.config.list_physical_devices('GPU')
-    print("Num GPUs Available: ", len(gpus))
+
+    init_env()
+   
     _mpi_init()
-    rank = proc_id()
+    rank = proc_id() if args.rank is None else args.rank
     sz = num_procs()
+    print("Rank: ", rank)
 
     if rank == 0:
         if not os.path.exists('rgb_stacking/data'):
             os.mkdir('rgb_stacking/data')
             os.mkdir('rgb_stacking/data/images')
 
-    split = 100
+    split = args.split
     frames_per_expert = args.total_frames // sz // split
     assert frames_per_expert > 0
-    j = 0
+
 
     for i in range(split):
         # Run inference on CPU
         with tf.device('/cpu'):
             total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
                                frames_per_expert,
-                               _POLICY_PATHS( triplet( rank // 5 ) ),
+                               _POLICY_PATHS( triplet( rank % 5 ) ),
                                args.debug, args.total_frames)
 
         _dict = defaultdict(lambda: list())
@@ -215,8 +219,8 @@ if __name__ == '__main__':
             cv2.imwrite('rgb_stacking/data/images/IMG_bl_{}_{}.png'.format(j, rank), img['bl'])
             cv2.imwrite('rgb_stacking/data/images/IMG_fl_{}_{}.png'.format(j, rank), img['fl'])
             cv2.imwrite('rgb_stacking/data/images/IMG_fr_{}_{}.png'.format(j, rank), img['fr'])
-            for i, k in enumerate(KEYS):
-                _dict[k].append( pose[i] )
+            for i_k, k in enumerate(KEYS):
+                _dict[k].append( pose[i_k] )
             _dict['id'].append(j)
             j += 1
         pd.DataFrame(_dict).to_csv(f'rgb_stacking/data/data_batch_{i}_{rank}.csv')

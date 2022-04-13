@@ -92,33 +92,45 @@ class VisionModule(nn.Module):
         # create ResNet-50 backbone
         self.backbone = resnet50()
         del self.backbone.fc
-        del self.backbone.conv1
-        del self.backbone.bn1
-        del self.backbone.relu
-        del self.backbone.maxpool
 
-        self.conv = nn.Conv2d(3, 64, 5, 2)
+        self.backbone.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, stride=2)
         self.do = torch.nn.Dropout(0.9)
-        self.mp1 = torch.nn.MaxPool2d(2, 1)
-        self.mp2 = torch.nn.MaxPool2d(2, 1)
-        self.bn = torch.nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
-        self.fc1 = nn.Linear(16 * 3, 512)
+        self.mp1 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
+        self.mp2 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
+
+        self.bn1 = torch.nn.BatchNorm2d(3)
+        self.bn2 = torch.nn.BatchNorm2d(64)
+        self.bn_f1 = torch.nn.BatchNorm1d(512)
+        self.bn_f2 = torch.nn.BatchNorm1d(256)
+
+        self.fc1 = nn.Linear(12 * 12 * 2048 * 3, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 21)
+
+        self.relu = torch.nn.ReLU()
 
     def forward(self, inputs):
         B = inputs.size(0)
         x = inputs.flatten(0, 1)
-        x = self.conv(x)
-        x = self.mp1( self.relu( self.do(x) ) )
+        x = self.bn1(x)
+
+        x = self.do( self.backbone.conv1(x) )
+        x = self.mp1( x )
+        x = self.bn2(x)
+        x = self.backbone.relu( x )
+
         x = self.backbone.layer1(x)
+        x = self.do( x )
+
         x = self.backbone.layer2(x)
         x = self.backbone.layer3(x)
         x = self.backbone.layer4(x)
-        x = self.mp2(x).flatten(1)
+
+        x = self.mp2(x)
         x = x.view(B, 3, -1).flatten(1)
-        x = self.relu( self.fc1(x) )
-        x = self.relu( self.fc2(x) )
+
+        x = self.do( x )
+        x = self.relu( self.bn_f1( self.fc1(x) ) )
+        x = self.relu( self.bn_f2( self.fc2(x) ) )
         return  self.fc3(x)
 
