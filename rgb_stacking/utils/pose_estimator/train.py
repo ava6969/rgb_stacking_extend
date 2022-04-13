@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize, ToTensor
 from model import VisionModule, DETR
 from dataset import CustomDataset, load_data
-from rgb_stacking.utils.pose_estimator.lars import lars
+from lars import lars
 import tqdm
 
 
@@ -91,8 +91,8 @@ if __name__ == '__main__':
     test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
 
     model = VisionModule(7)
-    model.to( 'cpu' )
+    model.to( 'cuda' )
 
     print(model)
 
-    train(train_dataloader, valid_dataloader, model, "cpu", batch_size)
+    train(train_dataloader, valid_dataloader, model, "cuda", batch_size)
