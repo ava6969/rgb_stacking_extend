@@ -4,6 +4,7 @@ from torchvision.transforms import Normalize, ToTensor
 from model import VisionModule
 from dataset import CustomDataset, load_data
 from lars import LARS
+import os
 
 
 def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr=0.5):
@@ -71,7 +72,9 @@ def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr
 
 
 if __name__ == '__main__':
-    examples = load_data('/home/dewe/rgb_stacking_extend/rgb_stacking', 1)
+    HOME = os.environ["HOME"]
+    print(HOME)
+    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', 1)
     sz = len(examples)
     print(f'Total Examples: {sz}')
     batch_size = 64 
