@@ -1,13 +1,15 @@
-import pickle, glob
-
+import glob
 import tqdm
 from PIL import Image
 from torch.utils.data import Dataset
 import torch
 import numpy as np
-from rgb_stacking.utils.get_data import KEYS
 import pandas as pd
 
+
+KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
+        'bX', 'bY', 'bZ', 'bQ1', 'bQ2', 'bQ3', 'bQ4',
+        'gX', 'gY', 'gZ', 'gQ1', 'gQ2', 'gQ3', 'gQ4']
 
 class CustomDataset(Dataset):
     def __init__(self, examples, img_transform=None, target_transform=None):
