@@ -3,11 +3,11 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize, ToTensor
 from model import VisionModule
 from dataset import CustomDataset, load_data
-from rgb_stacking.utils.pose_estimator import lars
+from lars import LARS
 
 
 def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr=0.5):
-    optimizer = lars.LARS(model.parameters(), lr, 0.9, 0.0001)
+    optimizer = LARS(model.parameters(), lr, 0.9, 0.0001)
     criterion = torch.nn.MSELoss()
     stepT = 40000 // batch_size
     step_lr = torch.optim.lr_scheduler.ConstantLR(optimizer, 0.5, stepT)
