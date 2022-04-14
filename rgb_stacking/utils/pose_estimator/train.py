@@ -1,10 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize, ToTensor
-from model import VisionModule, DETR
+from model import VisionModule
 from dataset import CustomDataset, load_data
-from lars import lars
-import tqdm
+from rgb_stacking.utils.pose_estimator import lars
 
 
 def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr=0.5):
