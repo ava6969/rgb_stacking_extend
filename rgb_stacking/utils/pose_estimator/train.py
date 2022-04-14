@@ -75,7 +75,7 @@ if __name__ == '__main__':
     examples = load_data('/home/dewe/rgb_stacking_extend/rgb_stacking', 1)
     sz = len(examples)
     print(f'Total Examples: {sz}')
-    batch_size = 4 
+    batch_size = 64 
     train_sz, valid_sz = int(0.7 * sz), int(0.9 * sz)
     train_dt, valid_dt, test_dt = examples[:train_sz], examples[train_sz:valid_sz], examples[valid_sz:]
 
