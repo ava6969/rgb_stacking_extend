@@ -1,6 +1,6 @@
 import rgb_stacking
 rgb_stacking.LOAD_GYM = False
-
+from reverb import dataset
 import argparse
 import os
 from collections import defaultdict
@@ -187,7 +187,6 @@ if __name__ == '__main__':
     triplet = lambda x: tuple(rgb_object.PROP_TRIPLETS_TEST.keys())[x]
     args = parser.parse_args()
     j = 0
-
 
     init_env()
    
