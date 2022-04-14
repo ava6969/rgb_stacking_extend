@@ -1,3 +1,5 @@
+import time
+
 import rgb_stacking
 rgb_stacking.LOAD_GYM = False
 import argparse
@@ -133,6 +135,7 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
 
         t_acquired = 0
         sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 0, 1, 1.0, 0.0, 1.0])
+        last = time.time()
         while t_acquired < total_frames:
 
             timestep = env.reset()
@@ -183,7 +186,9 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                 if t_acquired % 100 == 0:
                     total = mp.MPI.COMM_WORLD.allreduce(t_acquired)
                     if proc_id() == 0:
-                        _str = f'Total Frames Acquired: [ {total}/{TOTAL_F}] frames'
+                        c =  time.time()
+                        elapsed = c - last
+                        _str = f'Total Frames Acquired: [ {total}/{TOTAL_F}] frames, FPS: {total/elapsed}'
                         msg(_str)
                 t += 1
 
