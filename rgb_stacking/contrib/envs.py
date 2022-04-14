@@ -44,7 +44,7 @@ def make_vec_envs(env_name,
 
     envs = [make_env(env_name, seed, i) for i in range(num_processes)]
 
-    envs = SubprocVecEnv(envs, "fork") if use_multi_thread else DummyVecEnv(envs)
+    envs = SubprocVecEnv(envs, "forkserver") if use_multi_thread else DummyVecEnv(envs)
 
     envs = VecNormalize(envs, gamma=gamma)
 

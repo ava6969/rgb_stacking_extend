@@ -18,9 +18,10 @@
 from typing import NamedTuple
 import dm_env
 import numpy as np
+
 # This reverb dependency is needed since otherwise loading a SavedModel throws
 # an error when the ReverbDataset op is not found.
-# import reverb  # pylint: disable=unused-import
+import reverb  # pylint: disable=unused-import
 import tensorflow as tf
 import tree
 import typing_extensions
