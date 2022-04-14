@@ -1,10 +1,10 @@
 import rgb_stacking
 rgb_stacking.LOAD_GYM = False
-from reverb import dataset
 import argparse
 import os
 from collections import defaultdict
-
+from absl import flags, app
+from absl.flags import FLAGS
 import mpi4py
 import mpi4py as mp
 import cv2
@@ -17,15 +17,22 @@ from rgb_stacking.utils.mpi_tools import proc_id, num_procs, msg
 import colorsys
 import pandas as pd
 
+
+flags.DEFINE_integer('total_frames', 10000, 'path to root folder of dataset')
+flags.DEFINE_integer('rank', None,'path to root folder of dataset')
+flags.DEFINE_integer('split', None,'path to root folder of dataset')
+
 '''
 TODO:
     2) RANDOMIZE VISUALS
 '''
 
 _POLICY_PATHS = lambda path: f'rgb_stacking/utils/assets/saved_models/mpo_state_{path}'
+
 KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
         'bX', 'bY', 'bZ', 'bQ1', 'bQ2', 'bQ3', 'bQ4',
         'gX', 'gY', 'gZ', 'gQ1', 'gQ2', 'gQ3', 'gQ4']
+
 
 def to_example(rank, policy, env, obs, _debug):
     images = {'bl': obs['basket_back_left/pixels'],
@@ -53,20 +60,24 @@ def init_env():
     )
     return env
 
+
 def _mpi_init():
     mpi4py.MPI.Init()
     msg('Successfully loaded')
+
 
 def get_range(x, pct):
     lo = [x_* (1-pct) for x_ in x]
     hi = [x_ * (1 + pct) for x_ in x]
     return Uniform(lo, hi)
 
+
 def get_range_single(x, sz, pct):
     x = np.full(sz, x)
     lo = [x_* (1-pct) for x_ in x]
     hi = [x_ * (1 + pct) for x_ in x]
     return Uniform(lo, hi)
+
 
 def get_quaternion_from_euler(roll, pitch, yaw):
     """
@@ -86,6 +97,7 @@ def get_quaternion_from_euler(roll, pitch, yaw):
     qw = np.cos(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.sin(pitch / 2) * np.sin(yaw / 2)
 
     return [qx, qy, qz, qw]
+
 
 def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=1E9):
 
@@ -178,10 +190,10 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
     return frames
 
 
-if __name__ == '__main__':
+def main(_argv):
     parser = argparse.ArgumentParser('Data Collection')
     parser.add_argument('-f', '--total_frames', type=int)
-    parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-d', '--debug_specs', type=bool)
     parser.add_argument('-r', '--rank', type=int)
     parser.add_argument('-s', '--split', type=int)
     triplet = lambda x: tuple(rgb_object.PROP_TRIPLETS_TEST.keys())[x]
@@ -211,7 +223,7 @@ if __name__ == '__main__':
             total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
                                frames_per_expert,
                                _POLICY_PATHS( triplet( rank % 5 ) ),
-                               args.debug, args.total_frames)
+                               args.debug_specs, args.total_frames)
 
         _dict = defaultdict(lambda: list())
         for img, pose in total_frames:
@@ -224,3 +236,10 @@ if __name__ == '__main__':
             j += 1
         pd.DataFrame(_dict).to_csv(f'rgb_stacking/data/data_batch_{i}_{rank}.csv')
         msg('saved batch {}'.format(i))
+
+
+if __name__ == '__main__':
+    try:
+        app.run(main)
+    except SystemExit:
+        pass
