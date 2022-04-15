@@ -137,8 +137,13 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
         sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 0, 1, 1.0, 0.0, 1.0])
         last = time.time()
         while t_acquired < total_frames:
+            timestep = None
+            while not timestep:
+                try:
+                    timestep = env.reset()
+                except Exception as e:
+                    timestep = None
 
-            timestep = env.reset()
             state = policy.initial_state()
             frames.append(to_example(rank, policy_path.split('/')[0],
                                      test_triplet,timestep.observation, debug))
