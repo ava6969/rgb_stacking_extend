@@ -10,12 +10,16 @@ import torch, tqdm
 import numpy as np
 
 
-def train(train_loader, valid_loader, model, device, batch_size, total, valid_total, n_epochs=10, lr=0.5):
-    optimizer = LARS(model.parameters(), lr, 0.9, 0.0001)
+def train(train_loader, valid_loader, model,
+          device, batch_size, total, valid_total,
+          optimizer,
+          n_epochs=10):
+
     criterion = torch.nn.MSELoss()
     valid_loss_min = -np.inf
-    stepT = 40000 // batch_size
+    stepT = 20000 * batch_size
     step_lr = torch.optim.lr_scheduler.ConstantLR(optimizer, 0.5, stepT)
+    total_batches = 0
 
     for epoch in range(1, n_epochs+1):
 
@@ -28,7 +32,7 @@ def train(train_loader, valid_loader, model, device, batch_size, total, valid_to
         ###################
         model.train()
         
-        for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total= total):
+        for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total):
             # move tensors to GPU if CUDA is available
             data, target = data.to(device), target.to(device)
             # clear the gradients of all optimized variables
@@ -43,7 +47,14 @@ def train(train_loader, valid_loader, model, device, batch_size, total, valid_to
             optimizer.step()
             # update training loss
             train_loss += loss.item()*data.size(0)
-            step_lr.step()
+
+            total_batches += data.shape[0]
+            if total_batches % stepT == 0:
+                step_lr.step()
+
+            if total_batches == 400000:
+                print("Reached Max TRaining Batches 400000")
+                break
             
         ######################    
         # validate the model #
@@ -116,7 +127,9 @@ if __name__ == '__main__':
 
 
     print(model)
-
+    optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=0.001)
     train(train_dataloader, valid_dataloader, model, "cuda:0", batch_size,
+          n_epochs=100,
           total=len(train_ds) // batch_size,
-          valid_total=len(valid_dt) // batch_size)
+          valid_total=len(valid_dt) // batch_size,
+          optimizer=optimizer)
