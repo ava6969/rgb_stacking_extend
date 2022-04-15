@@ -191,6 +191,7 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                         _str = f'Total Frames Acquired: [ {total}/{TOTAL_F}] frames, FPS: {total/elapsed}'
                         msg(_str)
                 t += 1
+        del policy
 
     return frames
 
@@ -198,7 +199,8 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
 def main(_argv):
     parser = argparse.ArgumentParser('Data Collection')
     parser.add_argument('-f', '--total_frames', type=int)
-    parser.add_argument('-d', '--debug_specs', type=bool)
+    parser.add_argument('-l', '--debug_specs', type=bool, default=False)
+    parser.add_argument('-d', '--debug', action="store_true")
     parser.add_argument('-r', '--rank', type=int)
     parser.add_argument('-s', '--split', type=int)
     triplet = lambda x: tuple(rgb_object.PROP_TRIPLETS_TEST.keys())[x]
@@ -228,7 +230,7 @@ def main(_argv):
             total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
                                frames_per_expert,
                                _POLICY_PATHS( triplet( rank % 5 ) ),
-                               args.debug_specs, args.total_frames)
+                               args.debug_specs, frames_per_expert*sz)
 
         _dict = defaultdict(lambda: list())
         for img, pose in total_frames:
@@ -241,6 +243,7 @@ def main(_argv):
             j += 1
         pd.DataFrame(_dict).to_csv(f'rgb_stacking/data/data_batch_{i}_{rank}.csv')
         msg('saved batch {}'.format(i))
+        del total_frames
 
 
 if __name__ == '__main__':
