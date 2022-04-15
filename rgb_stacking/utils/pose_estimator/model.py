@@ -4,6 +4,23 @@ import torch
 from torchvision.models.resnet import BasicBlock
 
 
+def _make_layer(inplanes, block, planes, blocks, stride=1):
+    downsample = None
+    if stride != 1 or inplanes != planes * block.expansion:
+        downsample = nn.Sequential(
+            nn.Conv2d(inplanes, planes * block.expansion,
+                      kernel_size=1, stride=stride, bias=False),
+            nn.BatchNorm2d(planes * block.expansion),
+        )
+
+    layers = []
+    layers.append(block(inplanes, planes, stride, downsample))
+    inplanes = planes * block.expansion
+    for i in range(1, blocks):
+        layers.append(block(inplanes, planes))
+
+    return nn.Sequential(*layers)
+
 class DETR(nn.Module):
     """
     Demo DETR implementation.
@@ -154,13 +171,13 @@ class VisionModule(nn.Module):
         self.conv2 = torch.nn.Conv2d(32, 32, 3, 1)
         self.max_pool = torch.nn.MaxPool2d(3, 3)
         self.relu = torch.nn.ReLU()
-        self.resnet_block_1 = BasicBlock(32, 16, 3)
-        self.resnet_block_2 = torch.nn.Sequential( BasicBlock(16, 32, 3), BasicBlock(32, 32, 3) )
-        self.resnet_block_3 = torch.nn.Sequential( BasicBlock(32, 64, 3), BasicBlock(64, 64, 3) )
-        self.resnet_block_4 = torch.nn.Sequential( BasicBlock(64, 64, 3), BasicBlock(64, 64, 3) )
+        self.resnet_block_1 = _make_layer(32, BasicBlock, 16, 1, 3)
+        self.resnet_block_2 = _make_layer(16, BasicBlock, 32, 2, 3)
+        self.resnet_block_3 = _make_layer(32, BasicBlock, 64, 2, 3)
+        self.resnet_block_4 = _make_layer(64, BasicBlock, 64, 2, 3)
         self.soft_max = torch.nn.Softmax2d()
         
-        self.fc1 = torch.nn.Linear(128, 128)
+        self.fc1 = torch.nn.Linear(192, 128)
         self.fc2 = torch.nn.Linear(128, 21)
 
     def forward(self, inputs):
@@ -171,8 +188,7 @@ class VisionModule(nn.Module):
         
         x = self.resnet_block_4( self.resnet_block_3( self.resnet_block_2( self.resnet_block_1(x))))
         x = self.soft_max(x).flatten(1)
-        
-        
+
         x = x.view(B, 3, -1).flatten(1)
         x = self.relu(x)
         return  self.fc2( self.relu( self.fc1(x) ) )

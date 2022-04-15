@@ -77,6 +77,7 @@ def train(train_loader, valid_loader, model, device, batch_size, total, valid_to
 
 
 if __name__ == '__main__':
+
     HOME = os.environ["HOME"]
     print(HOME)
     N = mp.cpu_count()
