@@ -47,11 +47,11 @@ class Policy(typing_extensions.Protocol):
 
 def policy_from_path(saved_model_path: str) -> Policy:
   """Loads policy from stored TF SavedModel."""
-  # another_strategy = tf.distribute.MirroredStrategy()
-  # with another_strategy.scope():
-  #   load_options = tf.saved_model.LoadOptions(experimental_io_device='/job:localhost')
-  #   policy = tf.saved_model.load(saved_model_path,  options=load_options)
-  policy = tf.saved_model.load(saved_model_path)
+  another_strategy = tf.distribute.MirroredStrategy()
+  with another_strategy.scope():
+    load_options = tf.saved_model.LoadOptions(experimental_io_device='/job:localhost')
+    policy = tf.saved_model.load(saved_model_path,  options=load_options)
+  # policy = tf.saved_model.load(saved_model_path)
   # Relax strict requirement with respect to its expected inputs, e.g. in
   # regards to unused arguments.
   policy = permissive_model.PermissiveModel(policy)
