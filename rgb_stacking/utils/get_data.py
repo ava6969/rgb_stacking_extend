@@ -226,7 +226,7 @@ def main(_argv):
 
     for i in range(split):
         # Run inference on CPU
-        with tf.device('/GPU:0'):
+        with tf.device('/cpu'):
             total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
                                frames_per_expert,
                                _POLICY_PATHS( triplet( rank % 5 ) ),
