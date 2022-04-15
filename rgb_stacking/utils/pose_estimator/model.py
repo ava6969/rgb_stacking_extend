@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torchvision.models import resnet50
 import torch
+from torchvision.models.resnet import BasicBlock
 
 
 class DETR(nn.Module):
@@ -73,8 +74,7 @@ class DETR(nn.Module):
         # finally project transformer outputs to class labels and bounding boxes
         return self.linear_class(h)
 
-
-class VisionModule(nn.Module):
+class LargeVisionModule(nn.Module):
     """
     Demo DETR implementation.
 
@@ -95,15 +95,15 @@ class VisionModule(nn.Module):
 
         self.backbone.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, stride=2)
         self.do = torch.nn.Dropout(0.9)
-        self.mp1 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
-        self.mp2 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
+        self.mp1 = torch.nn.MaxPool2d(kernel_size=2, stride=2)
+        self.mp2 = torch.nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.bn1 = torch.nn.BatchNorm2d(3)
         self.bn2 = torch.nn.BatchNorm2d(64)
         self.bn_f1 = torch.nn.BatchNorm1d(512)
         self.bn_f2 = torch.nn.BatchNorm1d(256)
 
-        self.fc1 = nn.Linear(12 * 12 * 2048 * 3, 512)
+        self.fc1 = nn.Linear(12 * 12 * (2048//16) * 3, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 21)
 
@@ -134,3 +134,45 @@ class VisionModule(nn.Module):
         x = self.relu( self.bn_f2( self.fc2(x) ) )
         return  self.fc3(x)
 
+class VisionModule(nn.Module):
+    """
+    Demo DETR implementation.
+
+    Demo implementation of DETR in minimal number of lines, with the
+    following differences wrt DETR in the paper:
+    * learned positional encoding (instead of sine)
+    * positional encoding is passed at input (instead of attention)
+    * fc bbox predictor (instead of MLP)
+    The model achieves ~40 AP on COCO val5k and runs at ~28 FPS on Tesla V100.
+    Only batch size 1 supported.
+    """
+    def __init__(self):
+        super().__init__()
+
+        # 3, 200, 200
+        self.conv1 = torch.nn.Conv2d(3, 32, 5, 1)
+        self.conv2 = torch.nn.Conv2d(32, 32, 3, 1)
+        self.max_pool = torch.nn.MaxPool2d(3, 3)
+        self.relu = torch.nn.ReLU()
+        self.resnet_block_1 = BasicBlock(32, 16, 3)
+        self.resnet_block_2 = torch.nn.Sequential( BasicBlock(16, 32, 3), BasicBlock(32, 32, 3) )
+        self.resnet_block_3 = torch.nn.Sequential( BasicBlock(32, 64, 3), BasicBlock(64, 64, 3) )
+        self.resnet_block_4 = torch.nn.Sequential( BasicBlock(64, 64, 3), BasicBlock(64, 64, 3) )
+        self.soft_max = torch.nn.Softmax2d()
+        
+        self.fc1 = torch.nn.Linear(128, 128)
+        self.fc2 = torch.nn.Linear(128, 21)
+
+    def forward(self, inputs):
+        B = inputs.size(0)
+        x = inputs.flatten(0, 1)
+        
+        x = self.max_pool( self.conv2( self.conv1(x)))
+        
+        x = self.resnet_block_4( self.resnet_block_3( self.resnet_block_2( self.resnet_block_1(x))))
+        x = self.soft_max(x).flatten(1)
+        
+        
+        x = x.view(B, 3, -1).flatten(1)
+        x = self.relu(x)
+        return  self.fc2( self.relu( self.fc1(x) ) )

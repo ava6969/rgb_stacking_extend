@@ -5,11 +5,15 @@ from model import VisionModule
 from dataset import CustomDataset, load_data
 from lars import LARS
 import os
+import multiprocessing as mp
+import torch, tqdm
+import numpy as np
 
 
-def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr=0.5):
+def train(train_loader, valid_loader, model, device, batch_size, total, valid_total, n_epochs=10, lr=0.5):
     optimizer = LARS(model.parameters(), lr, 0.9, 0.0001)
     criterion = torch.nn.MSELoss()
+    valid_loss_min = -np.inf
     stepT = 40000 // batch_size
     step_lr = torch.optim.lr_scheduler.ConstantLR(optimizer, 0.5, stepT)
 
@@ -23,7 +27,8 @@ def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr
         # train the model #
         ###################
         model.train()
-        for data, target in train_loader:
+        
+        for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total= total):
             # move tensors to GPU if CUDA is available
             data, target = data.to(device), target.to(device)
             # clear the gradients of all optimized variables
@@ -44,7 +49,7 @@ def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr
         # validate the model #
         ######################
         model.eval()
-        for data, target in valid_loader:
+        for i, (data, target) in tqdm.tqdm( enumerate(valid_loader), total=valid_total):
             # move tensors to GPU if CUDA is available
             data, target = data.to(device), target.to(device)
             # forward pass: compute predicted outputs by passing inputs to the model
@@ -55,8 +60,8 @@ def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr
             valid_loss += loss.item()*data.size(0)
         
         # calculate average losses
-        train_loss = train_loss/len(train_loader.sampler)
-        valid_loss = valid_loss/len(valid_loader.sampler)
+        train_loss = train_loss/total
+        valid_loss = valid_loss/valid_total
             
         # print training/validation statistics 
         print('Epoch: {} \tTraining Loss: {:.6f} \tValidation Loss: {:.6f} \t LR: {}'.format(
@@ -74,12 +79,13 @@ def train(train_loader, valid_loader, model, device, batch_size, n_epochs=10, lr
 if __name__ == '__main__':
     HOME = os.environ["HOME"]
     print(HOME)
-    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', 1)
+    N = mp.cpu_count()
+    batch_size = 64
+    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', jobs=N)
     sz = len(examples)
     print(f'Total Examples: {sz}')
-    batch_size = 64 
-    train_sz, valid_sz = int(0.7 * sz), int(0.9 * sz)
-    train_dt, valid_dt, test_dt = examples[:train_sz], examples[train_sz:valid_sz], examples[valid_sz:]
+    train_sz, valid_sz = int(0.6 * sz), int(0.2 * sz)
+    train_dt, valid_dt, test_dt = examples[:train_sz], examples[train_sz: train_sz + valid_sz], examples[train_sz + valid_sz:]
 
     img_transform = Normalize(0.1307, 0.3081)
     target_transform = ToTensor()
@@ -87,14 +93,29 @@ if __name__ == '__main__':
     train_ds, valid_ds, test_ds = CustomDataset(train_dt, img_transform, target_transform), \
                                   CustomDataset(valid_dt, img_transform, target_transform), \
                                   CustomDataset(test_dt, img_transform, target_transform)
+                                  
+    import utils.mpi_tools as mt
+    i = mt.proc_id()
+    s = N // mt.num_procs() 
+    N = mt.num_procs()
 
-    train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=32)
-    valid_dataloader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False)
+    train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=min(s, batch_size))
+    valid_dataloader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=min(s, batch_size))
     test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
 
-    model = VisionModule(7)
-    model.to( 'cuda' )
+
+    model = VisionModule()
+    model.to( 'cuda:0' )
+    
+    if torch.cuda.device_count() > 1:
+                
+        model = torch.nn.DataParallel(model)
+        
+        print('device: {} GPUS'.format(torch.cuda.device_count()))
+
 
     print(model)
 
-    train(train_dataloader, valid_dataloader, model, "cuda", batch_size)
+    train(train_dataloader, valid_dataloader, model, "cuda:0", batch_size,
+          total=len(train_ds) // batch_size,
+          valid_total=len(valid_dt) // batch_size)

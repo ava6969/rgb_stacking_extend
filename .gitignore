@@ -22,5 +22,5 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+rgb_stacking/data
 /benchmark_model/
