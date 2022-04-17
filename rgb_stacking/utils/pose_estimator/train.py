@@ -87,8 +87,6 @@ def train(train_loader, valid_loader, model,
 
 if __name__ == '__main__':
 
-    m = LargeVisionModule()
-    print(m(torch.rand(4, 3, 3, 200, 200)))
     HOME = os.environ["HOME"]
     print(HOME)
     N = mp.cpu_count()
