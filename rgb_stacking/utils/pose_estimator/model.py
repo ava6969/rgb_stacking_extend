@@ -125,7 +125,7 @@ class LargeVisionModule(nn.Module):
         self.relu = torch.nn.ReLU(True)
 
         with torch.no_grad():
-            _, z = self.parse_image( torch.randn(3, 3, 3, 200, 200))
+            _, z = self.parse_image( torch.randn(3, 3, 3, 200, 200).requires_grad(False))
             sz = np.product( z.shape[1:] )
 
         self.fc1 = nn.Linear(sz, 512)
