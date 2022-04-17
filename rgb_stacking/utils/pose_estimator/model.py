@@ -114,7 +114,7 @@ class LargeVisionModule(nn.Module):
 
         self.backbone.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, stride=2)
         self.backbone.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=1)
-        self.dropout = torch.nn.Dropout(0.9, True)
+        self.dropout = torch.nn.Dropout(0.9)
         self.backbone.maxpool2 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
 
         self.bn1 = torch.nn.BatchNorm2d(3)
@@ -122,7 +122,7 @@ class LargeVisionModule(nn.Module):
         self.bn_f1 = torch.nn.BatchNorm1d(512)
         self.bn_f2 = torch.nn.BatchNorm1d(256)
 
-        self.relu = torch.nn.ReLU(True)
+        self.relu = torch.nn.ReLU()
 
         with torch.no_grad():
             _, z = self.parse_image( torch.randn(3, 3, 3, 200, 200).requires_grad(False))
@@ -131,8 +131,6 @@ class LargeVisionModule(nn.Module):
         self.fc1 = nn.Linear(sz, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 21)
-
-
 
     def parse_image(self, inputs):
         B = inputs.size(0)
