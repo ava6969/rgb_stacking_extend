@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize, ToTensor
+from torchvision.transforms.transforms import Lambda
 from model import VisionModule
 from dataset import CustomDataset, load_data
 from lars import LARS
@@ -17,7 +18,7 @@ def train(train_loader, valid_loader, model,
 
     criterion = torch.nn.MSELoss()
     valid_loss_min = -np.inf
-    stepT = 20000 * batch_size
+    stepT = 20000 // batch_size
     step_lr = torch.optim.lr_scheduler.ConstantLR(optimizer, 0.5, stepT)
     total_batches = 0
 
@@ -49,12 +50,9 @@ def train(train_loader, valid_loader, model,
             train_loss += loss.item()*data.size(0)
 
             total_batches += data.shape[0]
-            if total_batches % stepT == 0:
-                step_lr.step()
 
-            if total_batches == 400000:
-                print("Reached Max TRaining Batches 400000")
-                break
+            step_lr.step()
+
             
         ######################    
         # validate the model #
@@ -93,18 +91,18 @@ if __name__ == '__main__':
     print(HOME)
     N = mp.cpu_count()
     batch_size = 64
-    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', jobs=N)
+    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', jobs=N, sz=60)
     sz = len(examples)
     print(f'Total Examples: {sz}')
-    train_sz, valid_sz = int(0.6 * sz), int(0.2 * sz)
-    train_dt, valid_dt, test_dt = examples[:train_sz], examples[train_sz: train_sz + valid_sz], examples[train_sz + valid_sz:]
+    train_sz, valid_sz = int(0.8 * sz), int(0.2 * sz)
+    train_dt, valid_dt = examples[:train_sz], examples[train_sz: ]
 
-    img_transform = Normalize(0.1307, 0.3081)
+    img_transform = Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     target_transform = ToTensor()
 
-    train_ds, valid_ds, test_ds = CustomDataset(train_dt, img_transform, target_transform), \
-                                  CustomDataset(valid_dt, img_transform, target_transform), \
-                                  CustomDataset(test_dt, img_transform, target_transform)
+    train_ds, valid_ds = CustomDataset(train_dt, img_transform, target_transform), \
+                                  CustomDataset(valid_dt, img_transform, target_transform)
+                                #   CustomDataset(test_dt, img_transform, target_transform)
                                   
     import utils.mpi_tools as mt
     i = mt.proc_id()
@@ -113,7 +111,7 @@ if __name__ == '__main__':
 
     train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=min(s, batch_size))
     valid_dataloader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=min(s, batch_size))
-    test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
+    # test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
 
 
     model = VisionModule()

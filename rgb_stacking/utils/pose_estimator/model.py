@@ -109,11 +109,12 @@ class LargeVisionModule(nn.Module):
         # create ResNet-50 backbone
         self.backbone = resnet50()
         del self.backbone.fc
+        del self.backbone.avgpool
 
         self.backbone.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, stride=2)
-        self.do = torch.nn.Dropout(0.9)
-        self.mp1 = torch.nn.MaxPool2d(kernel_size=2, stride=2)
-        self.mp2 = torch.nn.MaxPool2d(kernel_size=2, stride=2)
+        self.backbone.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=1);
+        self.dropout = torch.nn.Dropout(0.9, True)
+        self.backbone.maxpool2 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
 
         self.bn1 = torch.nn.BatchNorm2d(3)
         self.bn2 = torch.nn.BatchNorm2d(64)
@@ -124,7 +125,7 @@ class LargeVisionModule(nn.Module):
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 21)
 
-        self.relu = torch.nn.ReLU()
+        self.relu = torch.nn.ReLU(True)
 
     def forward(self, inputs):
         B = inputs.size(0)
@@ -184,9 +185,9 @@ class VisionModule(nn.Module):
         B = inputs.size(0)
         x = inputs.flatten(0, 1)
         
-        x = self.max_pool( self.conv2( self.conv1(x)))
+        x = self.max_pool( self.relu( self.conv2( self.relu( self.conv1(x) ) ) ))
         
-        x = self.resnet_block_4( self.resnet_block_3( self.resnet_block_2( self.resnet_block_1(x))))
+        x = self.resnet_block_4( self.resnet_block_3( self.resnet_block_2( self.resnet_block_1(x) ) ) )
         x = self.soft_max(x).flatten(1)
 
         x = x.view(B, 3, -1).flatten(1)
