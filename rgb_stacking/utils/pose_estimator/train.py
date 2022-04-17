@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize, ToTensor
 from torchvision.transforms.transforms import Lambda
-from model import VisionModule
+from model import VisionModule, LargeVisionModule
 from dataset import CustomDataset, load_data
 from lars import LARS
 import os
@@ -18,7 +18,7 @@ def train(train_loader, valid_loader, model,
 
     criterion = torch.nn.MSELoss()
     valid_loss_min = -np.inf
-    stepT = 20000 // batch_size
+    stepT = 40000 // batch_size
     step_lr = torch.optim.lr_scheduler.ConstantLR(optimizer, 0.5, stepT)
     total_batches = 0
 
@@ -87,6 +87,8 @@ def train(train_loader, valid_loader, model,
 
 if __name__ == '__main__':
 
+    m = LargeVisionModule()
+    print(m(torch.rand(4, 3, 3, 200, 200)))
     HOME = os.environ["HOME"]
     print(HOME)
     N = mp.cpu_count()
@@ -113,8 +115,7 @@ if __name__ == '__main__':
     valid_dataloader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=min(s, batch_size))
     # test_dataloader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
 
-
-    model = VisionModule()
+    model = LargeVisionModule()
     model.to( 'cuda:0' )
     
     if torch.cuda.device_count() > 1:
@@ -125,7 +126,7 @@ if __name__ == '__main__':
 
 
     print(model)
-    optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=0.001)
+    optimizer = LARS(model.parameters(), 1e-4, weight_decay=0.0001)
     train(train_dataloader, valid_dataloader, model, "cuda:0", batch_size,
           n_epochs=100,
           total=len(train_ds) // batch_size,

@@ -2,6 +2,7 @@ import torch.nn as nn
 from torchvision.models import resnet50
 import torch
 from torchvision.models.resnet import BasicBlock
+import numpy as np
 
 
 def _make_layer(inplanes, block, planes, blocks, stride=1):
@@ -103,7 +104,7 @@ class LargeVisionModule(nn.Module):
     The model achieves ~40 AP on COCO val5k and runs at ~28 FPS on Tesla V100.
     Only batch size 1 supported.
     """
-    def __init__(self, num_classes):
+    def __init__(self):
         super().__init__()
 
         # create ResNet-50 backbone
@@ -112,7 +113,7 @@ class LargeVisionModule(nn.Module):
         del self.backbone.avgpool
 
         self.backbone.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, stride=2)
-        self.backbone.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=1);
+        self.backbone.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=1)
         self.dropout = torch.nn.Dropout(0.9, True)
         self.backbone.maxpool2 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
 
@@ -121,33 +122,43 @@ class LargeVisionModule(nn.Module):
         self.bn_f1 = torch.nn.BatchNorm1d(512)
         self.bn_f2 = torch.nn.BatchNorm1d(256)
 
-        self.fc1 = nn.Linear(12 * 12 * (2048//16) * 3, 512)
+        self.relu = torch.nn.ReLU(True)
+
+        with torch.no_grad():
+            _, z = self.parse_image( torch.randn(3, 3, 3, 200, 200))
+            sz = np.product( z.shape[1:] )
+
+        self.fc1 = nn.Linear(sz, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 21)
 
-        self.relu = torch.nn.ReLU(True)
 
-    def forward(self, inputs):
+
+    def parse_image(self, inputs):
         B = inputs.size(0)
         x = inputs.flatten(0, 1)
-        x = self.bn1(x)
 
-        x = self.do( self.backbone.conv1(x) )
-        x = self.mp1( x )
-        x = self.bn2(x)
-        x = self.backbone.relu( x )
+        x = self.bn1(x)
+        x =  self.relu( self.dropout( self.backbone.conv1(x) ) )
+
+        x = self.relu( self.bn2( self.backbone.maxpool(x) ) )
 
         x = self.backbone.layer1(x)
-        x = self.do( x )
+        x = self.dropout(x)
 
         x = self.backbone.layer2(x)
         x = self.backbone.layer3(x)
         x = self.backbone.layer4(x)
 
-        x = self.mp2(x)
-        x = x.view(B, 3, -1).flatten(1)
+        x = self.backbone.maxpool2(x)
+        x = x.flatten(1).view(B, -1)
+        return B, x
 
-        x = self.do( x )
+    def forward(self, inputs):
+
+        B, x = self.parse_image(inputs)
+
+        x = self.dropout( x )
         x = self.relu( self.bn_f1( self.fc1(x) ) )
         x = self.relu( self.bn_f2( self.fc2(x) ) )
         return  self.fc3(x)
