@@ -8,6 +8,7 @@ from lars import LARS
 import os
 import multiprocessing as mp
 import torch, tqdm
+import rgb_stacking.utils.mpi_tools as mt
 import numpy as np
 
 
@@ -73,8 +74,6 @@ def train(train_loader, model,
 
 if __name__ == '__main__':
 
-    # M = DETRWrapper(21)
-    # print(M(torch.rand(4, 3, 3, 200, 200)))
 
     # utils.init_distributed_mode(args)
     HOME = os.environ["HOME"]
@@ -85,13 +84,11 @@ if __name__ == '__main__':
     sz = len(examples)
     print(f'Total Examples: {sz}')
 
-
     img_transform = Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     target_transform = ToTensor()
 
     train_ds = CustomDataset(examples, img_transform, target_transform)
-                                  
-    import utils.mpi_tools as mt
+
     i = mt.proc_id()
     s = N // mt.num_procs() 
     N = mt.num_procs()
