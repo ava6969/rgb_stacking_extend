@@ -3,7 +3,11 @@ from torchvision.models import resnet50
 import torch
 from torchvision.models.resnet import BasicBlock
 import numpy as np
-import rgb_stacking.utils.pose_estimator.detr.hubconf as hc
+
+from rgb_stacking.utils.pose_estimator.models.backbone import Backbone, Joiner
+from rgb_stacking.utils.pose_estimator.models.detr import DETR
+from rgb_stacking.utils.pose_estimator.models.position_encoding import PositionEmbeddingSine
+from rgb_stacking.utils.pose_estimator.models.transformer import Transformer
 
 
 def _make_layer(inplanes, block, planes, blocks, stride=1):
@@ -39,12 +43,12 @@ class DETRWrapper(nn.Module):
         super().__init__()
 
         hidden_dim = 512
-        backbone = hc.Backbone("resnet50", train_backbone=True, return_interm_layers=False, dilation=False)
-        pos_enc = hc.PositionEmbeddingSine(hidden_dim // 2, normalize=True)
-        backbone_with_pos_enc = hc.Joiner(backbone, pos_enc)
+        backbone = Backbone("resnet50", train_backbone=True, return_interm_layers=False, dilation=False)
+        pos_enc = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
+        backbone_with_pos_enc = Joiner(backbone, pos_enc)
         backbone_with_pos_enc.num_channels = backbone.num_channels
-        transformer = hc.Transformer(d_model=hidden_dim, return_intermediate_dec=True)
-        self.detr = hc.DETR(backbone_with_pos_enc, transformer, num_classes=num_classes, num_queries=5)
+        transformer = Transformer(d_model=hidden_dim, return_intermediate_dec=True)
+        self.detr = DETR(backbone_with_pos_enc, transformer, num_classes=num_classes, num_queries=5)
 
     def forward(self, inputs):
 
