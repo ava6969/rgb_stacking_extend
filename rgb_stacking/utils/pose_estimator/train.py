@@ -74,7 +74,7 @@ def train(train_loader, model,
 
 if __name__ == '__main__':
 
-
+    # print(DETRWrapper(7)(torch.rand(64, 3, 3, 200, 200)).shape)
     # utils.init_distributed_mode(args)
     HOME = os.environ["HOME"]
     print(HOME)
@@ -95,7 +95,7 @@ if __name__ == '__main__':
 
     train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=min(s, batch_size))
 
-    model = DETRWrapper(21)
+    model = DETRWrapper(7)
     model.to( 'cuda:0' )
     
     if torch.cuda.device_count() > 1:
