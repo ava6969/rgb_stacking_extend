@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize, ToTensor
 from torchvision.transforms.transforms import Lambda
-from model import VisionModule, LargeVisionModule, DETR
+from model import VisionModule, LargeVisionModule, DETRWrapper
 from dataset import CustomDataset, load_data
 from lars import LARS
 import os
@@ -73,6 +73,10 @@ def train(train_loader, model,
 
 if __name__ == '__main__':
 
+    # M = DETRWrapper(21)
+    # print(M(torch.rand(4, 3, 3, 200, 200)))
+
+    # utils.init_distributed_mode(args)
     HOME = os.environ["HOME"]
     print(HOME)
     N = mp.cpu_count()
@@ -94,7 +98,7 @@ if __name__ == '__main__':
 
     train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=min(s, batch_size))
 
-    model = DETR(21)
+    model = DETRWrapper(21)
     model.to( 'cuda:0' )
     
     if torch.cuda.device_count() > 1:

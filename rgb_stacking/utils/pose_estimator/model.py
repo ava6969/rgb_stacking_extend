@@ -3,6 +3,7 @@ from torchvision.models import resnet50
 import torch
 from torchvision.models.resnet import BasicBlock
 import numpy as np
+import detr.hubconf as hc
 
 
 def _make_layer(inplanes, block, planes, blocks, stride=1):
@@ -22,7 +23,7 @@ def _make_layer(inplanes, block, planes, blocks, stride=1):
 
     return nn.Sequential(*layers)
 
-class DETR(nn.Module):
+class DETRWrapper(nn.Module):
     """
     Demo DETR implementation.
 
@@ -34,64 +35,27 @@ class DETR(nn.Module):
     The model achieves ~40 AP on COCO val5k and runs at ~28 FPS on Tesla V100.
     Only batch size 1 supported.
     """
-    def __init__(self, num_classes, hidden_dim=256, nheads=8, num_encoder_layers=6, num_decoder_layers=6):
+    def __init__(self, num_classes):
         super().__init__()
 
-        # create ResNet-50 backbone
-        self.backbone = resnet50()
-        del self.backbone.fc
-
-        # create conversion layer
-        self.conv = nn.Conv2d(2048, hidden_dim, 1)
- 
-        # create a default PyTorch transformer
-        self.transformer = nn.Transformer(
-            hidden_dim * 3, nheads, num_encoder_layers, num_decoder_layers)
-
-        # prediction heads, one extra class for predicting non-empty slots
-        # note that in baseline DETR linear_bbox layer is 3-layer MLP
-        self.linear_class = nn.Linear(hidden_dim*3, num_classes)
-        # output positional encodings (object queries)
-        self.query_pos = nn.Parameter(torch.rand(3, hidden_dim))
-        # spatial positional encodings
-        # note that in baseline DETR we use sine positional encodings
-        self.row_embed = nn.Parameter(torch.rand(50, hidden_dim // 2))
-        self.col_embed = nn.Parameter(torch.rand(50, hidden_dim // 2))
+        hidden_dim = 512
+        backbone = hc.Backbone("resnet50", train_backbone=True, return_interm_layers=False, dilation=False)
+        pos_enc = hc.PositionEmbeddingSine(hidden_dim // 2, normalize=True)
+        backbone_with_pos_enc = hc.Joiner(backbone, pos_enc)
+        backbone_with_pos_enc.num_channels = backbone.num_channels
+        transformer = hc.Transformer(d_model=hidden_dim, return_intermediate_dec=True)
+        self.detr = hc.DETR(backbone_with_pos_enc, transformer, num_classes=num_classes, num_queries=5)
 
     def forward(self, inputs):
 
         # propagate inputs through ResNet-50 up to avg-pool layer
         B = inputs.size(0)
         x = inputs.flatten(0, 1)
-        
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
 
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        x = self.backbone.layer3(x)
-        x = self.backbone.layer4(x)
-
-        # convert from 2048 to 256 feature planes for the transformer
-        h = self.conv(x)
-        h = h.view(B, -1, *(h.shape[-2:]) )
-
-        # construct positional encodings
-        H, W = h.shape[-2:]
-        print(H, W)
-        pos = torch.cat([
-            self.col_embed[:W].unsqueeze(0).repeat(H, 1, 1),
-            self.row_embed[:H].unsqueeze(1).repeat(1, W, 1),
-        ], dim=-1).flatten(0, 1).unsqueeze(1)
-
-        # propagate through the transformer
-        h = self.transformer(pos + 0.1 * h.flatten(2).permute(2, 0, 1),
-                             self.query_pos.unsqueeze(1)).transpose(0, 1)
+        x = self.detr(x)
 
         # finally project transformer outputs to class labels and bounding boxes
-        return self.linear_class(h)
+        return x
 
 class LargeVisionModule(nn.Module):
     """
