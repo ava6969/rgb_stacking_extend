@@ -3,7 +3,7 @@ from torchvision.models import resnet50
 import torch
 from torchvision.models.resnet import BasicBlock
 import numpy as np
-import detr.hubconf as hc
+import rgb_stacking.utils.pose_estimator.detr.hubconf as hc
 
 
 def _make_layer(inplanes, block, planes, blocks, stride=1):
