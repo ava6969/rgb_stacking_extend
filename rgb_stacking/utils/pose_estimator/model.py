@@ -43,14 +43,14 @@ class DETR(nn.Module):
 
         # create conversion layer
         self.conv = nn.Conv2d(2048, hidden_dim, 1)
-        self.skip_trans =  False
+ 
         # create a default PyTorch transformer
         self.transformer = nn.Transformer(
-            hidden_dim, nheads, num_encoder_layers, num_decoder_layers)
+            hidden_dim * 3, nheads, num_encoder_layers, num_decoder_layers)
 
         # prediction heads, one extra class for predicting non-empty slots
         # note that in baseline DETR linear_bbox layer is 3-layer MLP
-        self.linear_class = nn.Linear(hidden_dim, num_classes)
+        self.linear_class = nn.Linear(hidden_dim*3, num_classes)
         # output positional encodings (object queries)
         self.query_pos = nn.Parameter(torch.rand(3, hidden_dim))
         # spatial positional encodings
@@ -61,7 +61,10 @@ class DETR(nn.Module):
     def forward(self, inputs):
 
         # propagate inputs through ResNet-50 up to avg-pool layer
-        x = self.backbone.conv1(inputs)
+        B = inputs.size(0)
+        x = inputs.flatten(0, 1)
+        
+        x = self.backbone.conv1(x)
         x = self.backbone.bn1(x)
         x = self.backbone.relu(x)
         x = self.backbone.maxpool(x)
@@ -73,9 +76,7 @@ class DETR(nn.Module):
 
         # convert from 2048 to 256 feature planes for the transformer
         h = self.conv(x)
-
-        if self.fc:
-            return self.fc( h.flatten(1) )
+        h = h.view(B, -1, *(h.shape[-2:]) )
 
         # construct positional encodings
         H, W = h.shape[-2:]
