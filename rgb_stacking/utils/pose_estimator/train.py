@@ -94,10 +94,8 @@ if __name__ == '__main__':
     sz = len(examples)
     print(f'Total Examples: {sz}')
 
-
     # img_transform = Normalize((0.485, 0.486, 0.406), (0.229, 0.224, 0.225))
     img_transform = Lambda(lambd= lambda x: x/255 )
-
     target_transform = ToTensor()
 
     train_ds = CustomDataset(examples, img_transform, target_transform)
@@ -108,10 +106,8 @@ if __name__ == '__main__':
 
     train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=min(s, batch_size))
 
-
     #model = DETRWrapper(7)
     model = LargeVisionModule()
-
     model.to( 'cuda:0' )
     
     if torch.cuda.device_count() > 1:
