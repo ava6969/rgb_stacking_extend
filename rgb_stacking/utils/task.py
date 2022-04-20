@@ -104,9 +104,9 @@ _CAMERA_IDENTIFIERS = {'basket_back_left': 'base/basket_back_left',
 
 # Configuration of the MuJoCo cameras.
 _CAMERA_CONFIG = camera_sensor.CameraConfig(
-    width=200,
-    height=200,
-    fovy=30.,
+    width=256,
+    height=256,
+    fovy=45.,
     has_rgb=True,
     has_depth=False,
 )

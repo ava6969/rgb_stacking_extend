@@ -84,7 +84,7 @@ def train(train_loader, model,
 
 if __name__ == '__main__':
 
-    # print(DETRWrapper(7)(torch.rand(64, 3, 3, 200, 200)).shape)
+    print(DETRWrapper()(torch.rand(64, 3, 3, 200, 200)).shape)
     # utils.init_distributed_mode(args)
     HOME = os.environ["HOME"]
     print(HOME)
@@ -118,8 +118,8 @@ if __name__ == '__main__':
 
 
     print(model)
-    optimizer = torch.optim.AdamW(model.parameters(), 1e-4, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=1e-3)
     train(train_dataloader, model, "cuda:0", batch_size,
-          n_epochs=300,
+          n_epochs=1000,
           total=len(train_ds) // batch_size,
           optimizer=optimizer)

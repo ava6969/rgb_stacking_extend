@@ -18,6 +18,8 @@ from rgb_stacking.utils.dr.noise import Uniform
 from rgb_stacking.utils.mpi_tools import proc_id, num_procs, msg
 import colorsys
 import pandas as pd
+from caliberate import relative_pose
+from dm_control import viewer
 
 
 flags.DEFINE_integer('total_frames', 10000, 'path to root folder of dataset')
@@ -36,20 +38,22 @@ KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
         'gX', 'gY', 'gZ', 'gQ1', 'gQ2', 'gQ3', 'gQ4']
 
 
-def to_example(rank, policy, env, obs, _debug):
+def to_example(rank, policy, env, obs, _debug, only_plot=False):
     images = {'bl': obs['basket_back_left/pixels'],
               'fl': obs['basket_front_left/pixels'],
               'fr': obs['basket_front_right/pixels']}
-    poses = list(obs['rgb30_red/abs_pose'][-1]) + \
-            list(obs['rgb30_blue/abs_pose'][-1]) + \
-            list(obs['rgb30_green/abs_pose'][-1])
 
     if _debug:
         for k in ['bl', 'fl', 'fr']:
             cv2.imshow( '{}:{}:P{}:E{}'.format(k, rank, policy, env), images[k])
         cv2.waitKey(10)
 
-    return images, poses
+    if not only_plot:
+        poses = list( relative_pose(obs['rgb30_red/abs_pose'][-1]) ) + \
+                list( relative_pose(obs['rgb30_blue/abs_pose'][-1]) ) + \
+                list( relative_pose(obs['rgb30_green/abs_pose'][-1]) )
+
+        return images, poses
 
 
 def init_env():
@@ -81,26 +85,6 @@ def get_range_single(x, sz, pct):
     return Uniform(lo, hi)
 
 
-def get_quaternion_from_euler(roll, pitch, yaw):
-    """
-    Convert an Euler angle to a quaternion.
-
-    Input
-      :param roll: The roll (rotation around x-axis) angle in radians.
-      :param pitch: The pitch (rotation around y-axis) angle in radians.
-      :param yaw: The yaw (rotation around z-axis) angle in radians.
-
-    Output
-      :return qx, qy, qz, qw: The orientation in quaternion [x,y,z,w] format
-    """
-    qx = np.sin(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) - np.cos(roll / 2) * np.sin(pitch / 2) * np.sin(yaw / 2)
-    qy = np.cos(roll / 2) * np.sin(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.cos(pitch / 2) * np.sin(yaw / 2)
-    qz = np.cos(roll / 2) * np.cos(pitch / 2) * np.sin(yaw / 2) - np.sin(roll / 2) * np.sin(pitch / 2) * np.cos(yaw / 2)
-    qw = np.cos(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.sin(pitch / 2) * np.sin(yaw / 2)
-
-    return [qx, qy, qz, qw]
-
-
 def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=1E9):
 
     frames = []
@@ -127,11 +111,11 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
 
         camera_back = get_range([0.06, -0.26, 0.39], 0.1)
         # camera_right_euler = get_range([1.088, 0.001, 2.362], 0.05)
-        camera_fov = Uniform(30, 40)
+        camera_fov = Uniform(35, 45)
 
-        r = Uniform([0, 0.5, 0.5], [70/360, 1, 1])
-        g = Uniform([95/360, 0.5, 0.5 ], [165/360, 1 , 1 ])
-        b = Uniform([200/255, 0.5 , 0.5 ], [270/360, 1 , 1 ])
+        # r = Uniform([0, 0.5, 0.5], [70/360, 1, 1])
+        # g = Uniform([95/360, 0.5, 0.5 ], [165/360, 1 , 1 ])
+        # b = Uniform([200/255, 0.5 , 0.5 ], [270/360, 1 , 1 ])
 
         t_acquired = 0
         #sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 0, 1, 1.0, 0.0, 1.0])
@@ -153,26 +137,21 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
             t = 0
 
             while not done and t_acquired < total_frames:
-                env.physics.bind(props_color_geom[0]).rgba[:3] = colorsys.hsv_to_rgb(*r.sample())
-                env.physics.bind(props_color_geom[1]).rgba[:3] = colorsys.hsv_to_rgb(*g.sample())
-                env.physics.bind(props_color_geom[2]).rgba[:3] = colorsys.hsv_to_rgb(*b.sample())
+                # env.physics.bind(props_color_geom[0]).rgba[:3] = colorsys.hsv_to_rgb(*r.sample())
+                # env.physics.bind(props_color_geom[1]).rgba[:3] = colorsys.hsv_to_rgb(*g.sample())
+                # env.physics.bind(props_color_geom[2]).rgba[:3] = colorsys.hsv_to_rgb(*b.sample())
 
                 _light = env.physics.bind(light)
                 _light.ambient =  ambient.sample()
                 _light.diffuse = diffuse.sample()
 
                 _cam = env.physics.bind(camera[0])
-                _cam.pos = camera_left_pos.sample()
                 _cam.fovy = camera_fov.sample()
-                # _cam.quat = get_quaternion_from_euler( *camera_left_euler.sample() )
 
                 _cam = env.physics.bind(camera[1])
-                _cam.pos = camera_right_pos.sample()
                 _cam.fovy = camera_fov.sample()
-                # _cam.quat = get_quaternion_from_euler( *camera_right_euler.sample() )
 
                 _cam = env.physics.bind(camera[2])
-                _cam.pos = camera_back.sample()
                 _cam.fovy = camera_fov.sample()
 
                 # if np.random.rand() > 1:
