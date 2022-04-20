@@ -81,10 +81,10 @@ class LargeVisionModule(nn.Module):
         del self.backbone.fc
         del self.backbone.avgpool
 
-        self.backbone.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, stride=2)
-        self.backbone.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=1)
+        # self.backbone.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5, stride=2)
+        # self.backbone.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=1)
         self.dropout = torch.nn.Dropout(0.9)
-        self.backbone.maxpool2 = torch.nn.MaxPool2d(kernel_size=2, stride=1)
+        self.backbone.maxpool2 = torch.nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.bn1 = torch.nn.BatchNorm2d(3)
         self.bn2 = torch.nn.BatchNorm2d(64)

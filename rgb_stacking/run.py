@@ -20,8 +20,10 @@ from absl import app
 from absl import flags
 from absl.flags import FLAGS
 
+import argparse
 
 flags.DEFINE_string('config_path', "", 'path to config')
+# flags.DEFINE_bool('debug_specs', False, 'path to config')
 logging.disable(logging.CRITICAL)
 
 
@@ -77,6 +79,7 @@ def mpi_groups(args):
 
 
 def run(args, envs, policy, agent, rollouts, writer, device, rollout_per_learner_comm, avg_grad_comm):
+ 
     save_path = os.path.join(args.save_dir)
     try:
         os.makedirs(save_path)
@@ -99,9 +102,9 @@ def run(args, envs, policy, agent, rollouts, writer, device, rollout_per_learner
         if writer:
             writer.add_scalar('LearningRate/Critic', v_lr_, j)
             writer.add_scalar('LearningRate/Actor', p_lr_, j)
-
+ 
         for step in range(args.num_steps):
-
+       
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = policy.act(
                     rollouts.get_obs(step),
@@ -197,9 +200,14 @@ def run(args, envs, policy, agent, rollouts, writer, device, rollout_per_learner
 
 
 def main(argv: Sequence[str]) -> None:
+    parser = argparse.ArgumentParser('Runner')
+    parser.add_argument('-c', '--config_path')
+    parser.add_argument('-l', '--debug_specs', type=bool, default=False)
+    args = parser.parse_args()
+    
     init_env()
 
-    args = get_args(FLAGS.config_path)
+    args = get_args(args.config_path)
 
     _seed(args)
 
@@ -227,7 +235,7 @@ def main(argv: Sequence[str]) -> None:
     envs.seed(args.seed)
 
     if proc_id() == 0:
-        print(actor_critic)
+        msg(actor_critic)
 
     agent = ppo.PPO(
         actor_critic=actor_critic,
@@ -245,7 +253,6 @@ def main(argv: Sequence[str]) -> None:
                               args.model.hidden_size)
 
     avg_grad_comm, rollout_per_learner_comm = mpi_groups(args)
-
     obs = envs.reset()
     for k, o in obs.items():
         rollouts.obs[k][0].copy_(o)
