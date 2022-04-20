@@ -169,6 +169,7 @@ class GymWrapper(gym.Env):
             try:
                 success_obs = self.env.reset()
             except Exception as e:
+                print(e)
                 success_obs = None
 
         return self._observation(success_obs.observation)

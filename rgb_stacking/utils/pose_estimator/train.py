@@ -23,7 +23,7 @@ def train(train_loader, model,
     file = SummaryWriter()
     criterion = torch.nn.MSELoss()
     train_loss_min = np.inf
-    step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 200)
+    step_lr = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40000 // batch_size, gamma=0.5)
     total_batches = 0
 
     for epoch in range(1, n_epochs+1):
@@ -58,14 +58,15 @@ def train(train_loader, model,
             loss.backward()
             # perform a single optimization step (parameter update)
             
-            torch.nn.utils.clip_grad_norm(model.parameters(), 0.1)
+            # torch.nn.utils.clip_grad_norm(model.parameters(), 0.1)
             optimizer.step()
+            step_lr.step()
             
             train_loss += l
 
             total_batches += data.shape[0]
 
-        step_lr.step()
+    
         # calculate average losses
         train_loss = train_loss/total
   
@@ -84,7 +85,7 @@ def train(train_loader, model,
 
 if __name__ == '__main__':
 
-    print(DETRWrapper()(torch.rand(64, 3, 3, 200, 200)).shape)
+    # print(DETRWrapper(7)(torch.rand(64, 3, 3, 200, 200)).shape)
     # utils.init_distributed_mode(args)
     HOME = os.environ["HOME"]
     print(HOME)
@@ -118,7 +119,8 @@ if __name__ == '__main__':
 
 
     print(model)
-    optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), 1e-4, weight_decay=1e-4)
+    #optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=1e-3)
     train(train_dataloader, model, "cuda:0", batch_size,
           n_epochs=1000,
           total=len(train_ds) // batch_size,
