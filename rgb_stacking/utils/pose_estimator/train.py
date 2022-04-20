@@ -8,7 +8,11 @@ from lars import LARS
 import os
 import multiprocessing as mp
 import torch, tqdm
+import rgb_stacking.utils.mpi_tools as mt
 import numpy as np
+import math
+import sys
+from torch.utils.tensorboard import SummaryWriter
 
 
 def train(train_loader, model,
@@ -16,10 +20,10 @@ def train(train_loader, model,
           optimizer,
           n_epochs=10):
 
+    file = SummaryWriter()
     criterion = torch.nn.MSELoss()
     train_loss_min = np.inf
-    stepT = 40000 // batch_size
-    step_lr = torch.optim.lr_scheduler.ConstantLR(optimizer, 0.5, stepT)
+    step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 200)
     total_batches = 0
 
     for epoch in range(1, n_epochs+1):
@@ -41,27 +45,34 @@ def train(train_loader, model,
             output = model(data)
             # calculate the batch loss
             loss = criterion(output, target)
-            # backward pass: compute gradient of the loss with respect to model parameters
-            loss.backward()
-            # perform a single optimization step (parameter update)
-            optimizer.step()
+            
             # update training loss
             l = loss.item()*data.size(0)
+        
             
-            assert( l != np.nan )
+            if not math.isfinite(loss):
+                print("Loss is {}, stopping training".format(loss))
+                sys.exit()
+            
+             # backward pass: compute gradient of the loss with respect to model parameters
+            loss.backward()
+            # perform a single optimization step (parameter update)
+            
+            torch.nn.utils.clip_grad_norm(model.parameters(), 0.1)
+            optimizer.step()
+            
             train_loss += l
 
             total_batches += data.shape[0]
 
-            step_lr.step()
-
+        step_lr.step()
         # calculate average losses
         train_loss = train_loss/total
   
         # print training/validation statistics 
         print('Epoch: {} \tTraining Loss: {:.6f}  \t LR: {}'.format(
             epoch, train_loss, step_lr.get_last_lr()))
-        
+        file.add_scalar("Loss", train_loss, epoch)
         # save model if validation loss has decreased
         if train_loss <= train_loss_min:
             print('Training loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
@@ -73,32 +84,34 @@ def train(train_loader, model,
 
 if __name__ == '__main__':
 
-    # M = DETRWrapper(21)
-    # print(M(torch.rand(4, 3, 3, 200, 200)))
-
+    # print(DETRWrapper(7)(torch.rand(64, 3, 3, 200, 200)).shape)
     # utils.init_distributed_mode(args)
     HOME = os.environ["HOME"]
     print(HOME)
     N = mp.cpu_count()
     batch_size = 64
-    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', jobs=N, sz=60)
+    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', jobs=N)
     sz = len(examples)
     print(f'Total Examples: {sz}')
 
 
-    img_transform = Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    # img_transform = Normalize((0.485, 0.486, 0.406), (0.229, 0.224, 0.225))
+    img_transform = Lambda(lambd= lambda x: x/255 )
+
     target_transform = ToTensor()
 
     train_ds = CustomDataset(examples, img_transform, target_transform)
-                                  
-    import utils.mpi_tools as mt
+
     i = mt.proc_id()
     s = N // mt.num_procs() 
     N = mt.num_procs()
 
     train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=min(s, batch_size))
 
-    model = DETRWrapper(21)
+
+    #model = DETRWrapper(7)
+    model = LargeVisionModule()
+
     model.to( 'cuda:0' )
     
     if torch.cuda.device_count() > 1:
@@ -109,8 +122,8 @@ if __name__ == '__main__':
 
 
     print(model)
-    optimizer = LARS(model.parameters(), 1e-4, weight_decay=0.0001)
+    optimizer = torch.optim.AdamW(model.parameters(), 1e-4, weight_decay=1e-4)
     train(train_dataloader, model, "cuda:0", batch_size,
-          n_epochs=100,
+          n_epochs=300,
           total=len(train_ds) // batch_size,
           optimizer=optimizer)

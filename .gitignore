@@ -24,3 +24,6 @@ share/python-wheels/
 MANIFEST
 rgb_stacking/data
 /benchmark_model/
+runs
+*.pt
+events.*

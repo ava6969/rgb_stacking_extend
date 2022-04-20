@@ -47,8 +47,8 @@ class DETRWrapper(nn.Module):
         pos_enc = PositionEmbeddingSine(hidden_dim // 2, normalize=True)
         backbone_with_pos_enc = Joiner(backbone, pos_enc)
         backbone_with_pos_enc.num_channels = backbone.num_channels
-        transformer = Transformer(d_model=hidden_dim, return_intermediate_dec=True)
-        self.detr = DETR(backbone_with_pos_enc, transformer, num_classes=num_classes, num_queries=5)
+        transformer = Transformer(d_model=hidden_dim, return_intermediate_dec=False)
+        self.detr = DETR(backbone_with_pos_enc, transformer, num_classes=num_classes, num_queries=3)
 
     def forward(self, inputs):
 
@@ -56,10 +56,10 @@ class DETRWrapper(nn.Module):
         B = inputs.size(0)
         x = inputs.flatten(0, 1)
 
-        x = self.detr(x)
+        x = self.detr(x)[0]
 
         # finally project transformer outputs to class labels and bounding boxes
-        return x
+        return x.view(B, -1)
 
 class LargeVisionModule(nn.Module):
     """

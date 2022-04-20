@@ -110,9 +110,9 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
 
         policy = policy_loading.policy_from_path(policy_path)
 
-        props = [p.mjcf_model.find_all('body')[2] for p in env.base_env.task.props]
+        #props = [p.mjcf_model.find_all('body')[2] for p in env.base_env.task.props]
         props_color_geom = [p.mjcf_model.find_all('geom')[0] for p in env.base_env.task.props]
-        mass = env.physics.bind(props[1]).mass
+        #mass = env.physics.bind(props[1]).mass
 
         light = env.base_env.task.root_entity.mjcf_model.find_all('light')[0]
 
@@ -134,7 +134,7 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
         b = Uniform([200/255, 0.5 , 0.5 ], [270/360, 1 , 1 ])
 
         t_acquired = 0
-        sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 0, 1, 1.0, 0.0, 1.0])
+        #sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 0, 1, 1.0, 0.0, 1.0])
         last = time.time()
         while t_acquired < total_frames:
             timestep = None
@@ -149,7 +149,7 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                                      test_triplet,timestep.observation, debug))
             t_acquired += 1
             done = False
-            force = sampler.sample()
+            #force = sampler.sample()
             t = 0
 
             while not done and t_acquired < total_frames:
@@ -175,11 +175,11 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                 _cam.pos = camera_back.sample()
                 _cam.fovy = camera_fov.sample()
 
-                if np.random.rand() > 0.5:
-                    x = 0.99 ** t * force
-                    env.physics.bind(props[0]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
-                    env.physics.bind(props[1]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
-                    env.physics.bind(props[2]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
+                # if np.random.rand() > 1:
+                #     x = 0.99 ** t * force
+                #     env.physics.bind(props[0]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
+                #     env.physics.bind(props[1]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
+                #     env.physics.bind(props[2]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
 
                 (action, _), state = policy.step(timestep, state)
                 timestep = env.step(action)
@@ -189,7 +189,7 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
 
                 t_acquired += 1
                 if t_acquired % 100 == 0:
-                    total = mp.MPI.COMM_WORLD.allreduce(t_acquired)
+                    total = t_acquired * num_procs()
                     if proc_id() == 0:
                         c =  time.time()
                         elapsed = c - last
@@ -232,7 +232,8 @@ def main(_argv):
     for i in range(split):
         # Run inference on CPU
         with tf.device('/cpu'):
-            total_frames = run(rank, triplet(rank) if rank < len(rgb_object.PROP_TRIPLETS_TEST) else "rgb_train_random",
+            total_frames = run(rank, 
+                               triplet(rank % 5),
                                frames_per_expert,
                                _POLICY_PATHS( triplet( rank % 5 ) ),
                                args.debug_specs, frames_per_expert*sz)
