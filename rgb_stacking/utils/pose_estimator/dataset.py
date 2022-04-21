@@ -25,6 +25,10 @@ class CustomDataset(Dataset):
         img_paths, pose = self.examples[idx]
         images = torch.stack( [ self.transform( torch.from_numpy(
             np.array( Image.open( path ) ).astype(float) ).permute(2, 0, 1).float() ) for path in img_paths ] )
+       
+        pose[:3] = pose[:3] / 0.25
+        if np.any(-1 > pose) and np.any( pose > 1 ):
+            raise(f'label contains outlier data {pose}')
         label = torch.from_numpy( pose ).float()
         return images, label
 

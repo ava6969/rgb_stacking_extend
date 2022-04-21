@@ -59,7 +59,7 @@ class DETRWrapper(nn.Module):
         x = self.detr(x)[0]
 
         # finally project transformer outputs to class labels and bounding boxes
-        return x.view(B, -1)
+        return torch.tanh( x.view(B, -1) )
 
 class LargeVisionModule(nn.Module):
     """
@@ -85,6 +85,7 @@ class LargeVisionModule(nn.Module):
         # self.backbone.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=1)
         self.dropout = torch.nn.Dropout(0.9)
         self.backbone.maxpool2 = torch.nn.MaxPool2d(kernel_size=2, stride=2)
+        self.tanh = torch.nn.Tanh()
 
         self.bn1 = torch.nn.BatchNorm2d(3)
         self.bn2 = torch.nn.BatchNorm2d(64)
@@ -94,7 +95,7 @@ class LargeVisionModule(nn.Module):
         self.relu = torch.nn.ReLU()
 
         with torch.no_grad():
-            _, z = self.parse_image( torch.randn(3, 3, 3, 200, 200, requires_grad=False))
+            _, z = self.parse_image( torch.randn(3, 3, 3, 256, 256, requires_grad=False))
             sz = np.product( z.shape[1:] )
 
         self.fc1 = nn.Linear(sz, 512)
@@ -128,7 +129,7 @@ class LargeVisionModule(nn.Module):
         x = self.dropout( x )
         x = self.relu( self.bn_f1( self.fc1(x) ) )
         x = self.relu( self.bn_f2( self.fc2(x) ) )
-        return  self.fc3(x)
+        return  self.tanh( self.fc3(x) )
 
 class VisionModule(nn.Module):
     """

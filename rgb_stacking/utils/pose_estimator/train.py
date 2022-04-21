@@ -23,7 +23,7 @@ def train(train_loader, model,
     file = SummaryWriter()
     criterion = torch.nn.MSELoss()
     train_loss_min = np.inf
-    step_lr = torch.optim.lr_scheduler.StepLR(optimizer, step_size=40000 // batch_size, gamma=0.5)
+    # step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 200, gamma=0.5)
     total_batches = 0
 
     for epoch in range(1, n_epochs+1):
@@ -57,22 +57,19 @@ def train(train_loader, model,
              # backward pass: compute gradient of the loss with respect to model parameters
             loss.backward()
             # perform a single optimization step (parameter update)
-            
-            # torch.nn.utils.clip_grad_norm(model.parameters(), 0.1)
+   
             optimizer.step()
-            step_lr.step()
-            
+
             train_loss += l
 
             total_batches += data.shape[0]
 
-    
+        # step_lr.step()
         # calculate average losses
         train_loss = train_loss/total
   
         # print training/validation statistics 
-        print('Epoch: {} \tTraining Loss: {:.6f}  \t LR: {}'.format(
-            epoch, train_loss, step_lr.get_last_lr()))
+        print('Epoch: {} \tTraining Loss: {:.6f}'.format(epoch, train_loss))
         file.add_scalar("Loss", train_loss, epoch)
         # save model if validation loss has decreased
         if train_loss <= train_loss_min:
@@ -85,17 +82,19 @@ def train(train_loader, model,
 
 if __name__ == '__main__':
 
-    # print(DETRWrapper(7)(torch.rand(64, 3, 3, 200, 200)).shape)
-    # utils.init_distributed_mode(args)
     HOME = os.environ["HOME"]
     print(HOME)
     N = mp.cpu_count()
     batch_size = 64
+    
     examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', jobs=N)
+    
     sz = len(examples)
+    
     print(f'Total Examples: {sz}')
 
     # img_transform = Normalize((0.485, 0.486, 0.406), (0.229, 0.224, 0.225))
+    
     img_transform = Lambda(lambd= lambda x: x/255 )
     target_transform = ToTensor()
 
@@ -107,9 +106,8 @@ if __name__ == '__main__':
 
     train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=min(s, batch_size))
 
-    #model = DETRWrapper(7)
     model = LargeVisionModule()
-    model.to( 'cuda:0' )
+    model.to( 'cuda' )
     
     if torch.cuda.device_count() > 1:
                 
@@ -119,9 +117,10 @@ if __name__ == '__main__':
 
 
     print(model)
+    
     optimizer = torch.optim.AdamW(model.parameters(), 1e-4, weight_decay=1e-4)
-    #optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=1e-3)
-    train(train_dataloader, model, "cuda:0", batch_size,
+    
+    train(train_dataloader, model, "cuda", batch_size,
           n_epochs=1000,
           total=len(train_ds) // batch_size,
           optimizer=optimizer)
