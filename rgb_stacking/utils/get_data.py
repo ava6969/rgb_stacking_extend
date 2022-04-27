@@ -190,6 +190,10 @@ def main(_argv):
     triplet = lambda x: tuple(rgb_object.PROP_TRIPLETS_TEST.keys())[x]
     args = parser.parse_args()
     j = 0
+    
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     init_env()
    
@@ -210,12 +214,12 @@ def main(_argv):
 
     for i in range(split):
         # Run inference on CPU
-        with tf.device('/cpu'):
-            total_frames = run(rank, 
-                               triplet(rank % 5),
-                               frames_per_expert,
-                               _POLICY_PATHS( triplet( rank % 5 ) ),
-                               args.debug_specs, frames_per_expert*sz)
+        # with tf.device('/cpu'):
+        total_frames = run(rank, 
+                            triplet(rank % 5),
+                            frames_per_expert,
+                            _POLICY_PATHS( triplet( rank % 5 ) ),
+                            args.debug_specs, frames_per_expert*sz)
 
         _dict = defaultdict(lambda: list())
         for img, pose in total_frames:

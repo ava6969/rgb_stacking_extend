@@ -95,7 +95,7 @@ class LargeVisionModule(nn.Module):
         self.relu = torch.nn.ReLU()
 
         with torch.no_grad():
-            _, z = self.parse_image( torch.randn(3, 3, 3, 256, 256, requires_grad=False))
+            _, z = self.parse_image( torch.randn(3, 3, 3, 128, 128, requires_grad=False))
             sz = np.product( z.shape[1:] )
 
         self.fc1 = nn.Linear(sz, 512)
@@ -143,10 +143,10 @@ class VisionModule(nn.Module):
     The model achieves ~40 AP on COCO val5k and runs at ~28 FPS on Tesla V100.
     Only batch size 1 supported.
     """
-    def __init__(self):
+    def __init__(self, noTanh=False):
         super().__init__()
 
-        # 3, 200, 200
+        self.noTanh = noTanh
         self.conv1 = torch.nn.Conv2d(3, 32, 5, 1)
         self.conv2 = torch.nn.Conv2d(32, 32, 3, 1)
         self.max_pool = torch.nn.MaxPool2d(3, 3)
@@ -157,6 +157,8 @@ class VisionModule(nn.Module):
         self.resnet_block_4 = _make_layer(64, BasicBlock, 64, 2, 3)
         self.soft_max = torch.nn.Softmax2d()
         
+        if not noTanh:
+            self.tanh = torch.nn.Tanh()
         self.fc1 = torch.nn.Linear(192, 128)
         self.fc2 = torch.nn.Linear(128, 21)
 
@@ -171,4 +173,5 @@ class VisionModule(nn.Module):
 
         x = x.view(B, 3, -1).flatten(1)
         x = self.relu(x)
-        return  self.fc2( self.relu( self.fc1(x) ) )
+        x = self.fc2( self.relu( self.fc1(x) ) )
+        return x if self.noTanh else self.tanh( x )

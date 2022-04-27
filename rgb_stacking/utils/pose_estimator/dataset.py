@@ -12,6 +12,7 @@ KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
         'bX', 'bY', 'bZ', 'bQ1', 'bQ2', 'bQ3', 'bQ4',
         'gX', 'gY', 'gZ', 'gQ1', 'gQ2', 'gQ3', 'gQ4']
 
+
 class CustomDataset(Dataset):
     def __init__(self, examples, img_transform=None, target_transform=None):
         self.examples = examples
@@ -52,7 +53,7 @@ def load_data(parent_path, sz=None, jobs=1):
         jobs= min(jobs, sz)
     
     assert jobs > 0
-    delta = len(dfs) // jobs;
+    delta = max(1, len(dfs) // jobs);
     args = [ (parent_path, dfs[i:i+delta]) for i in range(0, len(dfs), delta)]
 
     if jobs > 1:
