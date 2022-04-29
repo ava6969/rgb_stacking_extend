@@ -40,13 +40,14 @@ def train(train_loader, valid_loader, model,
 
         for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total):
             # move tensors to GPU if CUDA is available
-            data, target = data.to(device), target.to(device)
+            data, targets = data.to(device), target.to(device)
+            targets = [ targets[:, :3], targets[:, 3:7], targets[:, 7:10], targets[:, 10:14], targets[:, 14:17], targets[:, 17:21] ]
             # clear the gradients of all optimized variables
             optimizer.zero_grad()
             # forward pass: compute predicted outputs by passing inputs to the model
-            output = model(data)
+            outputs = model(data)
             # calculate the batch loss
-            loss = criterion(output, target)
+            loss = torch.stack( [ criterion(output, target) for output, target in zip(outputs , targets)] ).mean()
             
             # update training loss
             l = loss.item()*data.size(0)
@@ -72,7 +73,8 @@ def train(train_loader, valid_loader, model,
             with torch.no_grad():
                 output = model(data)
             # calculate the batch loss
-            loss = criterion(output, target)
+ 
+            loss = torch.stack( [ criterion(output, target) for output, target in zip(outputs , targets)] ).mean()
             # update average validation loss 
             valid_loss += loss.item()*data.size(0)
 
@@ -133,10 +135,10 @@ if __name__ == '__main__':
 
     print(model)
     
-    if batch_size >= 64:
-        optimizer = LARS(model.parameters(), lr=5e-4,max_epoch=epochs*1e6//batch_size)
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=1e-3)
+    # if batch_size > 64:
+    optimizer = LARS(model.parameters(), lr=5e-4, max_epoch=epochs*1e6//batch_size)
+    # else:
+    #     optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=1e-3)
     
     train(train_dataloader, 
           valid_dataloader, 

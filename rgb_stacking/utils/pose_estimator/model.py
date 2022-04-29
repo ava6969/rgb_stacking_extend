@@ -160,7 +160,13 @@ class VisionModule(nn.Module):
         if not noTanh:
             self.tanh = torch.nn.Tanh()
         self.fc1 = torch.nn.Linear(192, 128)
-        self.fc2 = torch.nn.Linear(128, 21)
+        self.outputs = torch.nn.ModuleList( [torch.nn.Linear(128, 3),
+        torch.nn.Linear(128, 4),
+        torch.nn.Linear(128, 3),
+        torch.nn.Linear(128, 4),
+        torch.nn.Linear(128, 3),
+        torch.nn.Linear(128, 4)] )
+         
 
     def forward(self, inputs):
         B = inputs.size(0)
@@ -173,5 +179,5 @@ class VisionModule(nn.Module):
 
         x = x.view(B, 3, -1).flatten(1)
         x = self.relu(x)
-        x = self.fc2( self.relu( self.fc1(x) ) )
-        return x if self.noTanh else self.tanh( x )
+        x = [ out( self.relu( self.fc1(x) ) ) for out in self.outputs ]
+        return x
