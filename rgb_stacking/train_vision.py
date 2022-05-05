@@ -1,4 +1,7 @@
-import mpi4py.MPI
+
+import mpi4py
+mpi4py.rc.initialize = True
+mpi4py.rc.finalize = True
 import tensorflow as tf
 from numpy import uint8
 from torch.utils.data import DataLoader
