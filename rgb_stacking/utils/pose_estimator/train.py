@@ -151,7 +151,7 @@ if __name__ == '__main__':
 
     N = mp.cpu_count()
     no_dr = True
-    debug = True
+    debug = False
     batch_size = 64
     N_training_samples = int(1e6)
     N_total_batches = 400000
