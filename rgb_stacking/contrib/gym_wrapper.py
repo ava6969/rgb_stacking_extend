@@ -125,7 +125,7 @@ class GymWrapper(gym.Env):
         GymWrapper.ACTION_BIN_SIZE = num_discrete_action_bin
         self.env = environment.rgb_stacking(object_triplet=object_triplet,
                                             observation_set=environment.ObservationSet.ALL if add_image
-                                            else environment.ObservationSet.STATE_ONLY)
+                                            else environment.ObservationSet.STATE_ONLY, frameStack=1)
 
         self.add_image = add_image
         self.obs_preprocess = obs_preprocess
@@ -155,6 +155,7 @@ class GymWrapper(gym.Env):
         else:
             base = dict()
             base['past_action'] = np.ravel(obs['action/environment'])
+            
             for model_t in ['actor', 'critic']:
                 if self.obs_preprocess.value == ObservationPreprocess.FLATTEN.value:
                     base[model_t] = flatten_dict(obs, self.flatten_order[model_t], model_t == 'actor')
@@ -182,7 +183,7 @@ class GymWrapper(gym.Env):
     def step(self, action: numpy.ndarray):
         _clone_action = action.copy()
 
-        np_action = np.array([bins[action_index] for bins, action_index in zip(self.discrete_action_bin, action)])
+        np_action = np.array([bins[action_index] for bins, action_index in zip(self.discrete_action_bin, _clone_action)])
 
         time_step = self.env.step(np_action)
 

@@ -133,7 +133,7 @@ class ObservationSet(int, enum.Enum):
 def rgb_stacking(
         object_triplet: str = 'rgb_test_random',
         observation_set: ObservationSet = ObservationSet.STATE_ONLY,
-        use_sparse_reward: bool = False,
+        use_sparse_reward: bool = False, frameStack=4,
 ) -> subtask_env.SubTaskEnvironment:
     """Returns the environment.
 
@@ -253,6 +253,7 @@ def rgb_stacking(
         reward_fn = stack_rewards.get_shaped_stacking_reward()
     env_builder.add_preprocessor(reward_functions.RewardPreprocessor(reward_fn))
 
+    _OBSERVATION_STACK_DEPTH = frameStack
     # We concatenate several observations from consecutive timesteps. Depending
     # on the observations, we will concatenate a different number of observations.
     # - Most observations are stacked 3 times

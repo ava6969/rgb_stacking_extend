@@ -1,6 +1,7 @@
 import time
 
 import rgb_stacking
+from rgb_stacking.utils.dr.gym_dr import VisionModelDomainRandomizer
 rgb_stacking.LOAD_GYM = False
 import argparse
 import os
@@ -14,7 +15,7 @@ import tensorflow as tf
 from rgb_stacking.utils import environment, policy_loading
 from dm_robotics.manipulation.props.rgb_objects import rgb_object
 import numpy as np
-from rgb_stacking.utils.dr.noise import Uniform
+
 from rgb_stacking.utils.mpi_tools import proc_id, num_procs, msg
 import colorsys
 import pandas as pd
@@ -31,7 +32,6 @@ TODO:
     2) RANDOMIZE VISUALS
 '''
 
-_POLICY_PATHS = lambda path: f'rgb_stacking/utils/assets/saved_models/mpo_state_{path}'
 
 KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
         'bX', 'bY', 'bZ', 'bQ1', 'bQ2', 'bQ3', 'bQ4',
@@ -72,99 +72,71 @@ def _mpi_init():
     msg('Successfully loaded')
 
 
-def get_range(x, pct):
-    lo = [x_* (1-pct) for x_ in x]
-    hi = [x_ * (1 + pct) for x_ in x]
-    return Uniform(lo, hi)
+class VisionModelGym:
+    
+    def __init__(self, rank, debug):
+        
+        POLICY_PATHS = lambda path: f'rgb_stacking/utils/assets/saved_models/mpo_state_{path}'
+        triplet = lambda x: tuple(rgb_object.PROP_TRIPLETS_TEST.keys())[x]
+        
+        self.test_triplet = triplet(rank % 5)
+        self.policy_path = POLICY_PATHS( self.test_triplet )
+        self.rank = rank
+        self.debug = debug
+        
+        self.env = environment.rgb_stacking(object_triplet=self.test_triplet,
+                    observation_set=environment.ObservationSet.ALL,
+                    use_sparse_reward=True, frameStack=3)
+        
+        self.policy = policy_loading.policy_from_path(self.policy_path)
+        
+        self.randomize = VisionModelDomainRandomizer( self.env )
+        
+        self.env_state = None
+        
+        self.policy_state = None
+  
+    def reset(self):
+        self.env_state = None
+        while not self.env_state:
+            try:
+                 self.env_state = self.env.reset()
+            except Exception as e:
+                self.env_state = None
+       
+        self.policy_state = self.policy.initial_state()
+        
+    def next(self):
+        
+        self.randomize( )
 
+        (action, _), self.policy_state = self.policy.step( self.env_state, self.policy_state)
+        self.env_state = self.env.step(action)
 
-def get_range_single(x, sz, pct):
-    x = np.full(sz, x)
-    lo = [x_* (1-pct) for x_ in x]
-    hi = [x_ * (1 + pct) for x_ in x]
-    return Uniform(lo, hi)
-
-
-def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=1E9):
+        if (self.env_state .last() ) or (self.env_state.reward == 1):
+            self.reset()
+        
+        return to_example(self.rank, self.policy_path.split('/')[0],
+                   self.test_triplet, self.env_state.observation, self.debug)
+            
+    
+    def close(self):
+        self.env.close()
+        
+def run(rank, total_frames: int, debug=True, TOTAL_F=1E9):
 
     frames = []
-    with environment.rgb_stacking(object_triplet=test_triplet,
-                                  observation_set=environment.ObservationSet.ALL,
-                                  use_sparse_reward=True) as env:
-
-        policy = policy_loading.policy_from_path(policy_path)
-
-        #props = [p.mjcf_model.find_all('body')[2] for p in env.base_env.task.props]
-        props_color_geom = [p.mjcf_model.find_all('geom')[0] for p in env.base_env.task.props]
-        #mass = env.physics.bind(props[1]).mass
-
-        light = env.base_env.task.root_entity.mjcf_model.find_all('light')[0]
-
-        ambient = get_range_single(0.3, 3, 0.1)
-        diffuse = get_range_single(0.6, 3, 0.1)
-
-        camera = env.base_env.task.root_entity.mjcf_model.find_all('camera')[1:4]
-
-        camera_left_pos = get_range([1, -0.395, 0.253], 0.1)
-        # camera_left_euler = get_range([1.142, 0.004, 0.783], 0.05)
-        camera_right_pos = get_range([0.967, 0.381, 0.261], 0.1)
-
-        camera_back = get_range([0.06, -0.26, 0.39], 0.1)
-        # camera_right_euler = get_range([1.088, 0.001, 2.362], 0.05)
-        camera_fov = Uniform(35, 45)
-
-        # r = Uniform([0, 0.5, 0.5], [70/360, 1, 1])
-        # g = Uniform([95/360, 0.5, 0.5 ], [165/360, 1 , 1 ])
-        # b = Uniform([200/255, 0.5 , 0.5 ], [270/360, 1 , 1 ])
-
+    try:
+        data_handler = VisionModelGym(rank, debug)
         t_acquired = 0
-        #sampler = Uniform([mass, mass, mass, mass, mass, mass], [1, 0, 1, 1.0, 0.0, 1.0])
         last = time.time()
+        data_handler.reset()
+        
         while t_acquired < total_frames:
-            timestep = None
-            while not timestep:
-                try:
-                    timestep = env.reset()
-                except Exception as e:
-                    timestep = None
 
-            state = policy.initial_state()
-            frames.append(to_example(rank, policy_path.split('/')[0],
-                                     test_triplet,timestep.observation, debug))
-            t_acquired += 1
-            done = False
-            #force = sampler.sample()
             t = 0
-
-            while not done and t_acquired < total_frames:
-                # env.physics.bind(props_color_geom[0]).rgba[:3] = colorsys.hsv_to_rgb(*r.sample())
-                # env.physics.bind(props_color_geom[1]).rgba[:3] = colorsys.hsv_to_rgb(*g.sample())
-                # env.physics.bind(props_color_geom[2]).rgba[:3] = colorsys.hsv_to_rgb(*b.sample())
-
-                _light = env.physics.bind(light)
-                _light.ambient =  ambient.sample()
-                _light.diffuse = diffuse.sample()
-
-                _cam = env.physics.bind(camera[0])
-                _cam.fovy = camera_fov.sample()
-
-                _cam = env.physics.bind(camera[1])
-                _cam.fovy = camera_fov.sample()
-
-                _cam = env.physics.bind(camera[2])
-                _cam.fovy = camera_fov.sample()
-
-                # if np.random.rand() > 1:
-                #     x = 0.99 ** t * force
-                #     env.physics.bind(props[0]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
-                #     env.physics.bind(props[1]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
-                #     env.physics.bind(props[2]).xfrc_applied[:2] = np.random.normal(x[:2], mass).clip(min=0)
-
-                (action, _), state = policy.step(timestep, state)
-                timestep = env.step(action)
-                frames.append(to_example(rank, policy_path.split('/')[0],
-                                         test_triplet, timestep.observation, debug))
-                done = timestep.last() or (timestep.reward == 1)
+            while t_acquired < total_frames:
+                frames.append( data_handler.next() )
 
                 t_acquired += 1
                 if t_acquired % 100 == 0:
@@ -175,7 +147,9 @@ def run(rank, test_triplet, total_frames: int, policy_path, debug=True, TOTAL_F=
                         _str = f'Total Frames Acquired: [ {total}/{TOTAL_F}] frames, FPS: {total/elapsed}'
                         msg(_str)
                 t += 1
-        del policy
+    except Exception as e:
+        print(e)
+        data_handler.close()
 
     return frames
 
@@ -187,7 +161,7 @@ def main(_argv):
     parser.add_argument('-d', '--debug', action="store_true")
     parser.add_argument('-r', '--rank', type=int)
     parser.add_argument('-s', '--split', type=int)
-    triplet = lambda x: tuple(rgb_object.PROP_TRIPLETS_TEST.keys())[x]
+    
     args = parser.parse_args()
     j = 0
     
@@ -211,14 +185,9 @@ def main(_argv):
     frames_per_expert = args.total_frames // sz // split
     assert frames_per_expert > 0
 
-
     for i in range(split):
-        # Run inference on CPU
-        # with tf.device('/cpu'):
         total_frames = run(rank, 
-                            triplet(rank % 5),
                             frames_per_expert,
-                            _POLICY_PATHS( triplet( rank % 5 ) ),
                             args.debug_specs, frames_per_expert*sz)
 
         _dict = defaultdict(lambda: list())

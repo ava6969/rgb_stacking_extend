@@ -1,4 +1,5 @@
 import glob
+# from torch._C import namedtuple
 import tqdm
 from PIL import Image
 from torch.utils.data import Dataset
@@ -7,11 +8,23 @@ import numpy as np
 import pandas as pd
 import multiprocessing as mp
 
+from utils import environment, mpi_tools
+# from rgb_stacking.utils.get_data import VisionModelGym
+
 
 KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
         'bX', 'bY', 'bZ', 'bQ1', 'bQ2', 'bQ3', 'bQ4',
         'gX', 'gY', 'gZ', 'gQ1', 'gQ2', 'gQ3', 'gQ4']
 
+# class Buffer:
+#     def __init__(self, total_workers):
+#         self.data_handler = VisionModelGym( mpi_tools.proc_id() )
+#         self.N = total_workers
+        
+#     def gather(self, buffer_size):
+#         n = buffer_size // self.N
+#         print( "Gathering {} Data / {} workers".format(n, self.N) )
+#         return [self.data_handler.next() in tqdm.tqdm( range(n) )]
 
 class CustomDataset(Dataset):
     def __init__(self, examples, img_transform=None, target_transform=None):
@@ -27,10 +40,10 @@ class CustomDataset(Dataset):
         images = torch.stack( [ self.transform( torch.from_numpy(
             np.array( Image.open( path ) ).astype(float) ).permute(2, 0, 1).float() ) for path in img_paths ] )
        
-        pose[:3] = pose[:3] / 0.25
-        if np.any(-1 > pose) and np.any( pose > 1 ):
-            raise(f'label contains outlier data {pose}')
+        pose[:3], pose[7:10], pose[14 : 17] = pose[:3] / 0.25, pose[7:10]/0.25, pose[14 : 17]/0.25
+
         label = torch.from_numpy( pose ).float()
+        
         return images, label
 
 
