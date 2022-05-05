@@ -61,6 +61,7 @@ class DETRWrapper(nn.Module):
         # finally project transformer outputs to class labels and bounding boxes
         return torch.tanh( x.view(B, -1) )
 
+
 class LargeVisionModule(nn.Module):
     """
     Demo DETR implementation.
@@ -122,7 +123,7 @@ class LargeVisionModule(nn.Module):
         x = x.flatten(1).view(B, -1)
         return B, x
 
-    def forward(self, inputs):
+    def forward(self, inputs) -> torch.Tensor:
 
         B, x = self.parse_image(inputs)
 
@@ -131,22 +132,11 @@ class LargeVisionModule(nn.Module):
         x = self.relu( self.bn_f2( self.fc2(x) ) )
         return  self.tanh( self.fc3(x) )
 
-class VisionModule(nn.Module):
-    """
-    Demo DETR implementation.
 
-    Demo implementation of DETR in minimal number of lines, with the
-    following differences wrt DETR in the paper:
-    * learned positional encoding (instead of sine)
-    * positional encoding is passed at input (instead of attention)
-    * fc bbox predictor (instead of MLP)
-    The model achieves ~40 AP on COCO val5k and runs at ~28 FPS on Tesla V100.
-    Only batch size 1 supported.
-    """
-    def __init__(self, noTanh=False):
+class VisionModule(nn.Module):
+    def __init__(self):
         super().__init__()
 
-        self.noTanh = noTanh
         self.conv1 = torch.nn.Conv2d(3, 32, 5, 1)
         self.conv2 = torch.nn.Conv2d(32, 32, 3, 1)
         self.max_pool = torch.nn.MaxPool2d(3, 3)
@@ -156,19 +146,12 @@ class VisionModule(nn.Module):
         self.resnet_block_3 = _make_layer(32, BasicBlock, 64, 2, 3)
         self.resnet_block_4 = _make_layer(64, BasicBlock, 64, 2, 3)
         self.soft_max = torch.nn.Softmax2d()
-        
-        if not noTanh:
-            self.tanh = torch.nn.Tanh()
+
         self.fc1 = torch.nn.Linear(192, 128)
-        self.outputs = torch.nn.ModuleList( [torch.nn.Linear(128, 3),
-        torch.nn.Linear(128, 4),
-        torch.nn.Linear(128, 3),
-        torch.nn.Linear(128, 4),
-        torch.nn.Linear(128, 3),
-        torch.nn.Linear(128, 4)] )
-         
+        self.outputs = torch.nn.Linear(128, 21)
 
     def forward(self, inputs):
+        inputs = torch.stack([ inputs[k] for k in ['fl', 'fr', 'bl']], 1)
         B = inputs.size(0)
         x = inputs.flatten(0, 1)
         
@@ -179,5 +162,5 @@ class VisionModule(nn.Module):
 
         x = x.view(B, 3, -1).flatten(1)
         x = self.relu(x)
-        x = [ out( self.relu( self.fc1(x) ) ) for out in self.outputs ]
+        x = self.outputs( self.relu( self.fc1(x) ) )
         return x

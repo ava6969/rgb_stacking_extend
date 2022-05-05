@@ -3,9 +3,11 @@ import os
 # workaround to unpickle olf model files
 
 import torch
+from stable_baselines3.common.vec_env import DummyVecEnv
+
 from rgb_stacking.contrib.envs import make_vec_envs, VecPyTorch
 from rgb_stacking.utils.utils import get_render_func, get_vec_normalize
-
+from dm_control import viewer
 # sys.path.append('a2c_ppo_acktr')
 
 
@@ -41,7 +43,8 @@ actor_critic, obs_rms = \
 
 print(actor_critic)
 
-envs = ['StackRGBTestTriplet-v{}'.format(i) for i in range(5)]
+envs = ['StackRGBTestTripletActorDict-v{}'.format(i) for i in range(5) ]
+
 for env_name in envs:
     env = VecPyTorch(make_vec_envs(
         env_name,
@@ -49,39 +52,53 @@ for env_name in envs:
         1,
         None,
         False), device='cpu')
-
     # Get a render function
-    render_func = get_render_func(env)
+    # render_func = get_render_func(env)
 
+    returns = 0
     vec_norm = get_vec_normalize(env)
     if vec_norm is not None:
         vec_norm.eval()
         vec_norm.obs_rms = obs_rms
+        DummyVecEnv.action_spec = lambda self: env.action_spec()
+        DummyVecEnv.physics = property(lambda self: env.physics)
 
     recurrent_hidden_states = actor_critic.zero_state(1, "lstm")
     masks = torch.zeros(1, 1)
 
-    obs = env.reset()
-
-    if render_func is not None:
-        screen = render_func('rgbarray')
-
-    returns = 0
-    while True:
+    def policy_(timestep):
+        global recurrent_hidden_states, returns
+        returns += timestep[1]
+        done = timestep[2]
         with torch.no_grad():
             value, action, _, recurrent_hidden_states = actor_critic.act(
-                obs, recurrent_hidden_states, masks, deterministic=args.det)
+                timestep[0], recurrent_hidden_states, masks, deterministic=args.det)
+            masks.fill_(0.0 if done else 1.0)
+            return action
 
-        # Obser reward and next obs
-        obs, reward, done, _ = env.step(action)
-        returns += reward
-        masks.fill_(0.0 if done else 1.0)
+    viewer.launch(env, policy_ )
 
-        if render_func is not None:
-            render_func('human')
+    # obs = env.reset()
 
-        if done:
-            break
+    # if render_func is not None:
+    #     screen = render_func('rgbarray')
+
+
+    # while True:
+    #     with torch.no_grad():
+    #         value, action, _, recurrent_hidden_states = actor_critic.act(
+    #             obs, recurrent_hidden_states, masks, deterministic=args.det)
+    #
+    #     # Obser reward and next obs
+    #     obs, reward, done, _ = env.step(action)
+    #     returns += reward
+    #     masks.fill_(0.0 if done else 1.0)
+
+        # if render_func is not None:
+        #     render_func('human')
+
+        # if done:
+        #     break
 
     print('Total Returns: ', returns)
     env.close()

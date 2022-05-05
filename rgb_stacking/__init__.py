@@ -45,6 +45,7 @@ gym.envs.register(
      id='StackRGBTestTripletActorDict-v1',
      entry_point='contrib.gym_wrapper:GymWrapper',
      max_episode_steps=400,
+     reward_threshold=120,
      kwargs={'object_triplet': 'rgb_test_triplet2',
              'obs_preprocess': ObservationPreprocess.ACTOR_BASED,
              'num_discrete_action_bin': ACTION_BIN_sIZE}

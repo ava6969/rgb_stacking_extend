@@ -105,13 +105,13 @@ class GymWrapper(gym.Env):
         assert num_discrete_action_bin % 2 == 1, 'number of discrete action bin must be odd'
 
         BINARY_GRIPPER_IDX = -1
-        bins = [num_discrete_action_bin for _ in range(self.action_spec.shape[0])]
+        bins = [num_discrete_action_bin for _ in range(self._action_spec.shape[0])]
         bins[BINARY_GRIPPER_IDX] = 2
 
         self.action_space = gym.spaces.MultiDiscrete(bins)
         self.discrete_action_bin = [np.linspace(_min, _max, num_discrete_action_bin)
-                                    for _min, _max in zip(self.action_spec.minimum[:-1], self.action_spec.maximum[:-1])]
-        self.discrete_action_bin.append(np.array([self.action_spec.minimum[-1], self.action_spec.maximum[-1]]))
+                                    for _min, _max in zip(self._action_spec.minimum[:-1], self._action_spec.maximum[:-1])]
+        self.discrete_action_bin.append(np.array([self._action_spec.minimum[-1], self._action_spec.maximum[-1]]))
 
     def __init__(self, object_triplet,
                  obs_preprocess=ObservationPreprocess.FLATTEN,
@@ -131,7 +131,7 @@ class GymWrapper(gym.Env):
         self.obs_preprocess = obs_preprocess
 
         obs_spec = self.env.observation_spec()
-        self.action_spec = self.env.action_spec()
+        self._action_spec = self.env.action_spec()
 
         self.discrete_action_bin = None
         self.flatten_order = dict()
@@ -145,6 +145,12 @@ class GymWrapper(gym.Env):
 
         self.make_space(obs_spec, space_map)
         self.make_discrete_action_space(num_discrete_action_bin)
+
+    def action_spec(self):
+        return self._action_spec
+
+    def physics(self):
+        return self.env.physics
 
     def _observation(self, obs):
 

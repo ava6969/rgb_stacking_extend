@@ -64,6 +64,19 @@ class TimeLimitMask(gym.Wrapper):
         return self.env.reset(**kwargs)
 
 
+
+class TimeStepWrapper:
+
+    def __init__(self, obs, reward , done, info):
+        self.result = obs, reward, done, info
+
+    def last(self):
+        return self.result[2]
+
+    def __getitem__(self, item: int):
+        return self.result[item]
+
+
 class VecPyTorch(VecEnvWrapper):
     def __init__(self, venv, device):
         """Return only every `skip`-th frame"""
@@ -78,7 +91,14 @@ class VecPyTorch(VecEnvWrapper):
             return torch.from_numpy(obs).float().to(self.device)
 
     def reset(self):
-        return self.observation(self.venv.reset())
+        return TimeStepWrapper( self.observation(self.venv.reset()), 0, False, {})
+
+    def action_spec(self):
+        return self.venv.get_attr("action_spec", 0)[0]()
+
+    @property
+    def physics(self):
+        return self.venv.get_attr("physics", 0)[0]()
 
     def step_async(self, actions):
         if isinstance(actions, torch.LongTensor):
@@ -88,10 +108,10 @@ class VecPyTorch(VecEnvWrapper):
         self.venv.step_async(actions)
 
     def step_wait(self):
-        obs, reward, done, info = self.venv.step_wait()
+        obs, reward ,done, info = self.venv.step_wait()
         obs = self.observation(obs)
-        reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
-        return obs, reward, done, info
+        reward  = torch.from_numpy( reward ).unsqueeze(dim=1).float()
+        return TimeStepWrapper(obs, reward , done, info)
 
 
 class VecNormalize(VecNormalize_):

@@ -1,9 +1,12 @@
+import mpi4py.MPI
 import torch
+import tensorflow as tf
+from numpy import uint8
 from torch.utils.data import DataLoader
 from torchvision.transforms import Normalize, ToTensor
 from torchvision.transforms.transforms import Lambda
 from model import VisionModule, LargeVisionModule, DETRWrapper
-from dataset import CustomDataset, load_data
+from dataset import CustomDataset, load_data, Buffer
 from lars import LARS
 import os
 import multiprocessing as mp
@@ -13,138 +16,151 @@ import numpy as np
 import math
 import sys
 from torch.utils.tensorboard import SummaryWriter
+from rgb_stacking.utils.pose_estimator.util.misc import setup_for_distributed
 
 
-def train(train_loader, valid_loader, model,
-          device, batch_size, total, valid_total,
-          optimizer,
-          n_epochs=10):
+def train(N_total_batches,
+          N_training_samples,
+          img_transform,
+          target_transform,
+          batch_size,
+          no_dr,
+          debug=False):
 
-    file = SummaryWriter()
-    criterion = torch.nn.MSELoss()
-    valid_loss_min = np.inf
-    valid_loss = 0
-    step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 20000, gamma=0.5)
-    total_batches = 0
-    name = "large" if isinstance(model, LargeVisionModule) else "small"
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        # Restrict TensorFlow to only use the first GPU
+        try:
+            tf.config.set_visible_devices(gpus[0], 'GPU')
+            tf.config.experimental.set_memory_growth(gpus[0], True)
+            logical_gpus = tf.config.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU, using:", gpus[0])
+        except RuntimeError as e:
+            # Visible devices must be set before GPUs have been initialized
+            print(e)
 
-    for epoch in range(1, n_epochs+1):
+    data_gen = Buffer(N_training_samples, mt.num_procs(), no_dr, debug)
+    fl, fr, bl, poses = None, None, None, None
 
-        # keep track of training and validation loss
-        train_loss = 0.0
-        
-        ###################
-        # train the model #
-        ###################
-        model.train()
+    if mt.proc_id() == 0:
+        train_loss_min = np.inf
+        file = SummaryWriter()
+        criterion = torch.nn.MSELoss()
+        model = VisionModule().to('cuda:1')
+        print(model)
 
-        for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total):
-            # move tensors to GPU if CUDA is available
-            data, targets = data.to(device), target.to(device)
-            targets = [ targets[:, :3], targets[:, 3:7], targets[:, 7:10], targets[:, 10:14], targets[:, 14:17], targets[:, 17:21] ]
-            # clear the gradients of all optimized variables
-            optimizer.zero_grad()
-            # forward pass: compute predicted outputs by passing inputs to the model
-            outputs = model(data)
-            # calculate the batch loss
-            loss = torch.stack( [ criterion(output, target) for output, target in zip(outputs , targets)] ).mean()
-            
-            # update training loss
-            l = loss.item()*data.size(0)
-            
-             # backward pass: compute gradient of the loss with respect to model parameters
-            loss.backward()
-            # perform a single optimization step (parameter update)
-   
-            optimizer.step()
-            # step_lr.step()
+        name = "large" if isinstance(model, LargeVisionModule) else "small"
+        name += "no_dr" if no_dr else "dr"
 
-            train_loss += l
+        if batch_size > 64:
+            optimizer = LARS(model.parameters(), lr=5e-4, max_epoch=N_total_batches * N_training_samples // batch_size)
+        else:
+            optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-3)
 
-            total_batches += data.shape[0]
-            
-            if ii == total:
-                break
-            
-        model.eval()
-        for ii, (data, target) in tqdm.tqdm( enumerate(valid_loader), total=valid_total):
-            data, target = data.to(device), target.to(device)
-            # forward pass: compute predicted outputs by passing inputs to the model
-            with torch.no_grad():
-                output = model(data)
-            # calculate the batch loss
- 
-            loss = torch.stack( [ criterion(output, target) for output, target in zip(outputs , targets)] ).mean()
-            # update average validation loss 
-            valid_loss += loss.item()*data.size(0)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 40000, gamma=0.5)
 
-        
-        # calculate average losses
-        train_loss = train_loss/total
-        valid_loss = valid_loss/valid_total
-  
-        # print training/validation statistics 
-        print('Epoch: {} \tTraining Loss: {:.6f} Validation Loss: {:.6f} LR: {}'.format(epoch, train_loss, valid_loss, step_lr.get_last_lr()) )
-        file.add_scalar("Train Loss", train_loss, epoch)
-        file.add_scalar("Validation Loss", valid_loss, epoch)
-        
-        # save model if validation loss has decreased
-        if valid_loss <= valid_loss_min:
-            print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
-            valid_loss_min,
-            valid_loss))
-            torch.save(model, '{}_model_{}.pt'.format(name, batch_size))
-            valid_loss_min = valid_loss
+        N = mt.num_procs()
+        img_sz = [N] + data_gen.img_size
+        pose_size = [N] + data_gen.pose_size
+
+        fl, fr, bl, poses = np.empty(img_sz, dtype=uint8),\
+                            np.empty(img_sz, dtype=uint8),\
+                            np.empty(img_sz, dtype=uint8), \
+                            np.empty(pose_size, dtype=float)
+
+    flattened_img_size = [-1] + data_gen.img_size[1:]
+
+    for epoch in tqdm.tqdm( range(N_total_batches) ):
+
+        data_gen.gather()
+
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.fl, fl, 0)
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.fr, fr, 0)
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.bl, bl, 0)
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.poses, poses, 0)
+
+        if mt.proc_id() == 0:
+            train_batch = CustomDataset(dict(fl=fl.reshape(flattened_img_size),
+                                             fr=fr.reshape(flattened_img_size),
+                                             bl=bl.reshape(flattened_img_size),
+                                             poses=poses.reshape(-1, 21) ), img_transform, target_transform)
+
+            train_dataloader = DataLoader(train_batch,
+                                          batch_size=batch_size,
+                                          shuffle=True,
+                                          num_workers=mp.cpu_count())
+
+            train_loss = train_per_batch(train_dataloader,
+                                         model,
+                                         N_training_samples,
+                                         optimizer,
+                                         criterion, batch_size)
+            step_lr.step()
+
+            # calculate average losses
+            train_loss = train_loss / N_training_samples
+            print('Epoch: {} \tTraining Loss: {:.6f} LR: {}'.format(epoch, train_loss, step_lr.get_last_lr()))
+            file.add_scalar("Train Loss", train_loss, epoch)
+
+            # save model if validation loss has decreasedN_total_batches
+            if train_loss <= train_loss_min:
+                print('Training loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
+                    train_loss_min,
+                    train_loss))
+                torch.save(model, '{}_model_{}.pt'.format(name, batch_size))
+                train_loss_min = train_loss
+
+
+def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size):
+
+    ###################
+    # train the model #
+    ###################
+    model.train()
+
+    # keep track of training and validation loss
+    train_loss = 0.0
+
+    for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total):
+
+        data, target = {k : d.to('cuda:1') for k, d in data.items()}, target.to('cuda:1')
+
+        optimizer.zero_grad()
+
+        output = model(data)
+
+        loss = criterion(output, target)
+
+        l = loss.item()*batch_size
+
+        loss.backward()
+
+        optimizer.step()
+
+        train_loss += l
+
+    return train_loss
 
 
 if __name__ == '__main__':
 
+    setup_for_distributed(mt.proc_id() == 0)
+
     HOME = os.environ["HOME"]
     print(HOME)
+
     N = mp.cpu_count()
-    batch_size = 256
-    epochs = 300
-    
-    examples = load_data( HOME + '/rgb_stacking_extend/rgb_stacking', jobs=N)
-    
-    sz = len(examples)
-    
-    print(f'Total Examples: {sz}')
-    
-    img_transform = Lambda(lambd= lambda x: x/255 )
+    no_dr = True
+    debug = True
+    batch_size = 64
+    N_training_samples = int(1e6)
+    N_total_batches = 400000
+
+    if no_dr:
+        img_transform = Lambda(lambd= lambda x: x/255 )
+    else:
+        img_transform = None
+
     target_transform = ToTensor()
 
-    N = int(1e6)
-    train_ds = CustomDataset(examples[:N], img_transform, target_transform)
-    
-    valid_ds = CustomDataset(examples[N:], img_transform, target_transform)
-
-    train_dataloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=mp.cpu_count())
-    
-    valid_dataloader = DataLoader(valid_ds, batch_size=batch_size, shuffle=False, num_workers=mp.cpu_count())
-
-    model = VisionModule(True)
-    model.to( 'cuda' )
-    
-    if torch.cuda.device_count() > 1:
-                
-        model = torch.nn.DataParallel(model)
-        
-        print('device: {} GPUS'.format(torch.cuda.device_count()))
-
-
-    print(model)
-    
-    # if batch_size > 64:
-    optimizer = LARS(model.parameters(), lr=5e-4, max_epoch=epochs*1e6//batch_size)
-    # else:
-    #     optimizer = torch.optim.Adam(model.parameters(), 5e-4, weight_decay=1e-3)
-    
-    train(train_dataloader, 
-          valid_dataloader, 
-          model, "cuda",
-          batch_size,
-          n_epochs=epochs,
-          total= len(train_ds)//batch_size,
-          valid_total=len(valid_ds) // batch_size,
-          optimizer=optimizer)
+    train(N_total_batches, N_training_samples, img_transform, target_transform, batch_size, no_dr, debug)

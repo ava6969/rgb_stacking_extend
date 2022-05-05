@@ -9,7 +9,7 @@ from dm_control import viewer
 from dm_robotics.manipulation.props.rgb_objects import rgb_object
 from dm_robotics.moma import subtask_env
 import numpy as np
-from task import _BASKET_ORIGIN, WORKSPACE_CENTER, WORKSPACE_SIZE
+from rgb_stacking.utils.task import _BASKET_ORIGIN, WORKSPACE_CENTER, WORKSPACE_SIZE
 
 from rgb_stacking.utils import environment, policy_loading
 
