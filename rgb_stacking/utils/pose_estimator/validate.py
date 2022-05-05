@@ -1,16 +1,13 @@
-import gym
 import numpy as np
-from absl import flags, app
-from absl.flags import FLAGS
+from absl import app
 import torch
 import tensorflow as tf
 from dm_control import viewer
 
 
 from rgb_stacking.utils import environment, policy_loading
-from rgb_stacking.utils.caliberate import relative_pose, max_workspace_limits
+from rgb_stacking.utils.caliberate import relative_pose
 from rgb_stacking.utils.policy_loading import policy_from_path
-from rgb_stacking.utils.pose_estimator.model import LargeVisionModule, VisionModule
 
 
 def main(_argv):
