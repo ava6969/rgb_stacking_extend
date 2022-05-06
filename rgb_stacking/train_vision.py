@@ -52,7 +52,7 @@ def train(N_total_batches,
         train_loss_min = np.inf
         file = SummaryWriter()
         criterion = torch.nn.MSELoss()
-        model = VisionModule().to('cuda:1')
+        model = VisionModule().cuda()
         print(model)
 
         name = "large" if isinstance(model, LargeVisionModule) else "small"
@@ -129,7 +129,7 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 
     for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total):
 
-        data, target = {k : d.to('cuda:1') for k, d in data.items()}, target.to('cuda:1')
+        data, target = {k : d.cuda()for k, d in data.items()}, target.cuda()
 
         optimizer.zero_grad()
 
