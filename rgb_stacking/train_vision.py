@@ -21,7 +21,9 @@ import rgb_stacking.utils.mpi_tools as mt
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from rgb_stacking.utils.pose_estimator.util.misc import setup_for_distributed
+import logging
 
+logging.disable(logging.CRITICAL)
 
 def train(N_total_batches,
           N_training_samples,
