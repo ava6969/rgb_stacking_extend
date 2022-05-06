@@ -104,6 +104,7 @@ class VisionModelGym:
             try:
                 self.env_state = self.env.reset()
             except Exception as e:
+                print(e)
                 self.env_state = None
 
         self.policy_state = self.policy.initial_state()
