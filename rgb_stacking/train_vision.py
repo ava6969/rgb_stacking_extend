@@ -151,7 +151,7 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 if __name__ == '__main__':
 
     # setup_for_distributed(mt.proc_id() == 0)
-    init_env()
+    # init_env()
     HOME = os.environ["HOME"]
     print(HOME)
 

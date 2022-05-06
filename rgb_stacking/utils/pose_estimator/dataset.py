@@ -24,7 +24,9 @@ class Buffer:
     def __init__(self, buffer_size, total_workers, no_dr, debug):
         time.sleep(5)
         self.env = VisionModelGym( mpi_tools.proc_id(), no_dr, debug )
+        print('Created Model/Resetting Env')
         self.env.reset()
+        print('Reset successful')
         self.N = total_workers
         self.n = buffer_size // self.N
         print("Gathering {} Data Per {} workers".format(self.n, self.N))
