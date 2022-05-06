@@ -35,7 +35,7 @@ def train(N_total_batches,
     if gpus:
         # Restrict TensorFlow to only use the first GPU
         try:
-            tf.config.set_visible_devices(gpus[0], 'GPU')
+            tf.config.set_visible_devices([], 'GPU')
             tf.config.experimental.set_memory_growth(gpus[0], True)
             logical_gpus = tf.config.list_logical_devices('GPU')
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU, using:", gpus[0])
@@ -44,6 +44,7 @@ def train(N_total_batches,
             print(e)
 
     data_gen = Buffer(N_training_samples, mt.num_procs(), no_dr, debug)
+
     fl, fr, bl, poses = None, None, None, None
 
     if mt.proc_id() == 0:
@@ -166,5 +167,6 @@ if __name__ == '__main__':
         img_transform = None
 
     target_transform = ToTensor()
+
 
     train(N_total_batches, N_training_samples, img_transform, target_transform, batch_size, no_dr, debug)

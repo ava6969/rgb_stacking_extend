@@ -87,6 +87,7 @@ class VisionModelGym:
                                             observation_set=environment.ObservationSet.ALL,
                                             use_sparse_reward=True, frameStack=3)
 
+
         self.policy = policy_loading.policy_from_path(self.policy_path)
 
         if no_dr:
