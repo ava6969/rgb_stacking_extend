@@ -1,30 +1,25 @@
-#!/usr/bin/env python -W ignore::DeprecationWarning
-import argparse
-
-import mpi4py
-from absl import app
-import socket
-mpi4py.rc.initialize = True
-mpi4py.rc.finalize = True
-from rgb_stacking.run import init_env
+import mpi4py.MPI
+import torch
 import tensorflow as tf
 from numpy import uint8
 from torch.utils.data import DataLoader
-from torchvision.transforms import ToTensor
+from torchvision.transforms import Normalize, ToTensor
 from torchvision.transforms.transforms import Lambda
-from rgb_stacking.utils.pose_estimator.model import VisionModule, LargeVisionModule
-from rgb_stacking.utils.pose_estimator.dataset import CustomDataset, Buffer
-from rgb_stacking.utils.pose_estimator.lars import LARS
+from dm_control import viewer
+
+from model import VisionModule
+from dataset import CustomDataset, load_data, Buffer
+from lars import LARS
 import os
 import multiprocessing as mp
 import torch, tqdm
 import rgb_stacking.utils.mpi_tools as mt
 import numpy as np
+import math
+import sys
 from torch.utils.tensorboard import SummaryWriter
 from rgb_stacking.utils.pose_estimator.util.misc import setup_for_distributed
-import logging
 
-logging.disable(logging.CRITICAL)
 
 def train(N_total_batches,
           N_training_samples,
@@ -38,7 +33,7 @@ def train(N_total_batches,
     if gpus:
         # Restrict TensorFlow to only use the first GPU
         try:
-            tf.config.set_visible_devices([], 'GPU')
+            tf.config.set_visible_devices(gpus[0], 'GPU')
             tf.config.experimental.set_memory_growth(gpus[0], True)
             logical_gpus = tf.config.list_logical_devices('GPU')
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU, using:", gpus[0])
@@ -46,16 +41,14 @@ def train(N_total_batches,
             # Visible devices must be set before GPUs have been initialized
             print(e)
 
-    print('saved buffer')
     data_gen = Buffer(N_training_samples, mt.num_procs(), no_dr, debug)
-
     fl, fr, bl, poses = None, None, None, None
 
     if mt.proc_id() == 0:
         train_loss_min = np.inf
         file = SummaryWriter()
         criterion = torch.nn.MSELoss()
-        model = VisionModule().cuda()
+        model = VisionModule().to('cuda:1')
         print(model)
 
         name = "large" if isinstance(model, LargeVisionModule) else "small"
@@ -78,7 +71,7 @@ def train(N_total_batches,
                             np.empty(pose_size, dtype=float)
 
     flattened_img_size = [-1] + data_gen.img_size[1:]
-    print('started training')
+
     for epoch in tqdm.tqdm( range(N_total_batches) ):
 
         data_gen.gather()
@@ -93,12 +86,11 @@ def train(N_total_batches,
                                              fr=fr.reshape(flattened_img_size),
                                              bl=bl.reshape(flattened_img_size),
                                              poses=poses.reshape(-1, 21) ), img_transform, target_transform)
-            print(mp.cpu_count())
+
             train_dataloader = DataLoader(train_batch,
                                           batch_size=batch_size,
                                           shuffle=True,
-                                          #num_workers=4
-                                          )
+                                          num_workers=mp.cpu_count())
 
             train_loss = train_per_batch(train_dataloader,
                                          model,
@@ -133,7 +125,7 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 
     for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total):
 
-        data, target = {k : d.cuda()for k, d in data.items()}, target.cuda()
+        data, target = {k : d.to('cuda:1') for k, d in data.items()}, target.to('cuda:1')
 
         optimizer.zero_grad()
 
@@ -152,14 +144,10 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
     return train_loss
 
 
-def main(argv):
-    parser = argparse.ArgumentParser('Runner')
-    parser.add_argument('-l', '--debug_specs', type=bool, default=False)
-    args = parser.parse_args()
+if __name__ == '__main__':
 
-    print( mt.proc_id(), socket.hostname() )
     setup_for_distributed(mt.proc_id() == 0)
-    init_env()
+
     HOME = os.environ["HOME"]
     print(HOME)
 
@@ -177,11 +165,4 @@ def main(argv):
 
     target_transform = ToTensor()
 
-
     train(N_total_batches, N_training_samples, img_transform, target_transform, batch_size, no_dr, debug)
-
-if __name__ == '__main__':
-    try:
-        app.run(main)
-    except SystemExit:
-        pass
