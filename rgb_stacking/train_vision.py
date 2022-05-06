@@ -8,6 +8,7 @@ mpi4py.rc.initialize = True
 mpi4py.rc.finalize = True
 from rgb_stacking.run import init_env
 import tensorflow as tf
+import socket
 from numpy import uint8
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
@@ -32,7 +33,8 @@ def train(N_total_batches,
           target_transform,
           batch_size,
           no_dr,
-          debug=False):
+          debug=False,
+          root=0):
 
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
@@ -51,7 +53,7 @@ def train(N_total_batches,
 
     fl, fr, bl, poses = None, None, None, None
 
-    if mt.proc_id() == 0:
+    if mt.proc_id() == root:
         train_loss_min = np.inf
         file = SummaryWriter()
         criterion = torch.nn.MSELoss()
@@ -88,7 +90,7 @@ def train(N_total_batches,
         mpi4py.MPI.COMM_WORLD.Gather(data_gen.bl, bl, 0)
         mpi4py.MPI.COMM_WORLD.Gather(data_gen.poses, poses, 0)
 
-        if mt.proc_id() == 0:
+        if mt.proc_id() == root:
             train_batch = CustomDataset(dict(fl=fl.reshape(flattened_img_size),
                                              fr=fr.reshape(flattened_img_size),
                                              bl=bl.reshape(flattened_img_size),
@@ -154,12 +156,13 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 def main(argv):
     parser = argparse.ArgumentParser('Runner')
     parser.add_argument('-l', '--debug_specs', type=bool, default=False)
+    parser.add_argument('-r', '--root', type=int)
     args = parser.parse_args()
 
-    setup_for_distributed(mt.proc_id() == 0)
+
     init_env()
-    HOME = os.environ["HOME"]
-    print(HOME)
+    # HOME = os.environ["HOME"]
+    # print(HOME)
 
     N = mp.cpu_count()
     no_dr = True
@@ -175,8 +178,11 @@ def main(argv):
 
     target_transform = ToTensor()
 
+    root = 0 if not args.root else args.root
+    mt.msg( f"root {root}, host_name {socket.gethostname()} ")
 
-    train(N_total_batches, N_training_samples, img_transform, target_transform, batch_size, no_dr, debug)
+    setup_for_distributed(mt.proc_id() == root)
+    train(N_total_batches, N_training_samples, img_transform, target_transform, batch_size, no_dr, debug, root)
 
 if __name__ == '__main__':
     try:
