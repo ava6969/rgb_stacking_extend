@@ -63,7 +63,7 @@ def train(N_total_batches,
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-3)
 
-        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 20000, gamma=0.5)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 40000, gamma=0.5)
 
         N = mt.num_procs()
         img_sz = [N] + data_gen.img_size
@@ -162,7 +162,7 @@ def main(argv):
     no_dr = True
     debug = False
     batch_size = 64
-    N_training_samples = int(1e6)
+    N_training_samples = int(2.5e5)
     N_total_batches = 400000
 
     if no_dr:
