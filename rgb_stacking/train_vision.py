@@ -43,6 +43,7 @@ def train(N_total_batches,
             # Visible devices must be set before GPUs have been initialized
             print(e)
 
+    print('saved buffer')
     data_gen = Buffer(N_training_samples, mt.num_procs(), no_dr, debug)
 
     fl, fr, bl, poses = None, None, None, None
@@ -74,7 +75,7 @@ def train(N_total_batches,
                             np.empty(pose_size, dtype=float)
 
     flattened_img_size = [-1] + data_gen.img_size[1:]
-
+    print('started training')
     for epoch in tqdm.tqdm( range(N_total_batches) ):
 
         data_gen.gather()
@@ -149,7 +150,7 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 
 if __name__ == '__main__':
 
-    setup_for_distributed(mt.proc_id() == 0)
+    # setup_for_distributed(mt.proc_id() == 0)
     init_env()
     HOME = os.environ["HOME"]
     print(HOME)
