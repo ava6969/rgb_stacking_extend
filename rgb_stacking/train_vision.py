@@ -92,11 +92,11 @@ def train(N_total_batches,
                                              fr=fr.reshape(flattened_img_size),
                                              bl=bl.reshape(flattened_img_size),
                                              poses=poses.reshape(-1, 21) ), img_transform, target_transform)
-
+            print(mp.cpu_count())
             train_dataloader = DataLoader(train_batch,
                                           batch_size=batch_size,
                                           shuffle=True,
-                                          num_workers=mp.cpu_count())
+                                          num_workers=4)
 
             train_loss = train_per_batch(train_dataloader,
                                          model,
