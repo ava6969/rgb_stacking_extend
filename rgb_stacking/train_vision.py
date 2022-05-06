@@ -1,10 +1,11 @@
 
 import mpi4py
 
-from rgb_stacking.run import init_env
+
 
 mpi4py.rc.initialize = True
 mpi4py.rc.finalize = True
+from rgb_stacking.run import init_env
 import tensorflow as tf
 from numpy import uint8
 from torch.utils.data import DataLoader
