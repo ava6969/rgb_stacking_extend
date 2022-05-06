@@ -1,7 +1,7 @@
+import argparse
 
 import mpi4py
-
-
+from absl import app
 
 mpi4py.rc.initialize = True
 mpi4py.rc.finalize = True
@@ -148,10 +148,13 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
     return train_loss
 
 
-if __name__ == '__main__':
+def main(argv):
+    parser = argparse.ArgumentParser('Runner')
+    parser.add_argument('-l', '--debug_specs', type=bool, default=False)
+    args = parser.parse_args()
 
-    # setup_for_distributed(mt.proc_id() == 0)
-    # init_env()
+    setup_for_distributed(mt.proc_id() == 0)
+    init_env()
     HOME = os.environ["HOME"]
     print(HOME)
 
@@ -171,3 +174,9 @@ if __name__ == '__main__':
 
 
     train(N_total_batches, N_training_samples, img_transform, target_transform, batch_size, no_dr, debug)
+
+if __name__ == '__main__':
+    try:
+        app.run(main)
+    except SystemExit:
+        pass
