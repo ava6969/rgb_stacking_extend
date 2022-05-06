@@ -1,5 +1,8 @@
 
 import mpi4py
+
+from rgb_stacking.run import init_env
+
 mpi4py.rc.initialize = True
 mpi4py.rc.finalize = True
 import tensorflow as tf
@@ -57,7 +60,7 @@ def train(N_total_batches,
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-3)
 
-        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 40000, gamma=0.5)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 20000, gamma=0.5)
 
         N = mt.num_procs()
         img_sz = [N] + data_gen.img_size
@@ -145,7 +148,7 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 if __name__ == '__main__':
 
     setup_for_distributed(mt.proc_id() == 0)
-
+    init_env()
     HOME = os.environ["HOME"]
     print(HOME)
 
