@@ -1,3 +1,4 @@
+import argparse
 import glob
 # from torch._C import namedtuple
 import sys
@@ -23,7 +24,11 @@ KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
 
 class Buffer:
     def __init__(self, rank, buffer_size, total_workers, no_dr, debug):
-        time.sleep(5)
+        parser = argparse.ArgumentParser('Runner')
+        parser.add_argument('-l', '--debug_specs', type=bool, default=False)
+        # parser.add_argument('-r', '--root', type=int)
+        args = parser.parse_args()
+
         self.env = VisionModelGym(rank, no_dr, debug )
 
         if rank == 0:

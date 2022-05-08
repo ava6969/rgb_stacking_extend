@@ -26,11 +26,6 @@ import logging
 
 logging.disable(logging.CRITICAL)
 
-parser = argparse.ArgumentParser('Runner')
-parser.add_argument('-l', '--debug_specs', type=bool, default=False)
-# parser.add_argument('-r', '--root', type=int)
-args = parser.parse_args()
-
 def optimize(model,
              N_training_samples,
              batch_size,
