@@ -49,7 +49,7 @@ def train(N_total_batches,
             print(e)
 
     print('saved buffer')
-    data_gen = Buffer(N_training_samples, mt.num_procs(), no_dr, debug)
+    data_gen = Buffer(N_training_samples, mt.num_procs() - 1, no_dr, debug)
 
     fl, fr, bl, poses = None, None, None, None
 
@@ -68,27 +68,28 @@ def train(N_total_batches,
         else:
             optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=1e-3)
 
-        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 40000, gamma=0.5)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 20000, gamma=0.5)
 
         N = mt.num_procs()
         img_sz = [N] + data_gen.img_size
         pose_size = [N] + data_gen.pose_size
 
-        fl, fr, bl, poses = np.empty(img_sz, dtype=uint8),\
-                            np.empty(img_sz, dtype=uint8),\
-                            np.empty(img_sz, dtype=uint8), \
-                            np.empty(pose_size, dtype=float)
+        fl, fr, bl, poses = np.zeros(img_sz, dtype=uint8),\
+                            np.zeros(img_sz, dtype=uint8),\
+                            np.zeros(img_sz, dtype=uint8), \
+                            np.zeros(pose_size, dtype=float)
 
     flattened_img_size = [-1] + data_gen.img_size[1:]
     print('started training')
     for epoch in tqdm.tqdm( range(N_total_batches) ):
 
-        data_gen.gather()
+        if mt.proc_id() != root:
+            data_gen.gather()
 
-        mpi4py.MPI.COMM_WORLD.Gather(data_gen.fl, fl, 0)
-        mpi4py.MPI.COMM_WORLD.Gather(data_gen.fr, fr, 0)
-        mpi4py.MPI.COMM_WORLD.Gather(data_gen.bl, bl, 0)
-        mpi4py.MPI.COMM_WORLD.Gather(data_gen.poses, poses, 0)
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.fl, fl, root)
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.fr, fr, root)
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.bl, bl, root)
+        mpi4py.MPI.COMM_WORLD.Gather(data_gen.poses, poses, root)
 
         if mt.proc_id() == root:
             train_batch = CustomDataset(dict(fl=fl.reshape(flattened_img_size),
@@ -99,7 +100,8 @@ def train(N_total_batches,
             train_dataloader = DataLoader(train_batch,
                                           batch_size=batch_size,
                                           shuffle=True,
-                                          num_workers=4)
+                                        #   num_workers=0
+                                          )
 
             train_loss = train_per_batch(train_dataloader,
                                          model,
@@ -132,7 +134,7 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
     # keep track of training and validation loss
     train_loss = 0.0
 
-    for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total):
+    for ii, (data, target) in tqdm.tqdm( enumerate(train_loader), total=total // batch_size):
 
         data, target = {k : d.cuda()for k, d in data.items()}, target.cuda()
 
@@ -156,7 +158,7 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 def main(argv):
     parser = argparse.ArgumentParser('Runner')
     parser.add_argument('-l', '--debug_specs', type=bool, default=False)
-    parser.add_argument('-r', '--root', type=int)
+    # parser.add_argument('-r', '--root', type=int)
     args = parser.parse_args()
 
 
@@ -168,7 +170,7 @@ def main(argv):
     no_dr = True
     debug = False
     batch_size = 64
-    N_training_samples = int(2.5e5)
+    N_training_samples = int(1e6) 
     N_total_batches = 400000
 
     if no_dr:
@@ -178,8 +180,8 @@ def main(argv):
 
     target_transform = ToTensor()
 
-    root = 0 if not args.root else args.root
-    mt.msg( f"root {root}, host_name {socket.gethostname()} ")
+    root = 0
+    mt.msg( f"root {root}, host_name {socket.gethostname()} , N {mt.num_procs()} ")
 
     setup_for_distributed(mt.proc_id() == root)
     train(N_total_batches, N_training_samples, img_transform, target_transform, batch_size, no_dr, debug, root)

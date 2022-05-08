@@ -34,10 +34,10 @@ class Buffer:
         self.img_size = [self.n, 200, 200, 3]
         self.pose_size = [self.n, 21]
 
-        self.fl, self.fr, self.bl, self.poses = np.empty(self.img_size, dtype=np.uint8), \
-                                                np.empty(self.img_size, dtype=np.uint8),\
-                                                np.empty(self.img_size, dtype=np.uint8), \
-                                                np.empty(self.pose_size, dtype=float)
+        self.fl, self.fr, self.bl, self.poses = np.zeros(self.img_size, dtype=np.uint8), \
+                                                np.zeros(self.img_size, dtype=np.uint8),\
+                                                np.zeros(self.img_size, dtype=np.uint8), \
+                                                np.zeros(self.pose_size, dtype=float)
 
     def gather(self):
         try:
