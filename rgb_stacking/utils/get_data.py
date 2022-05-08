@@ -87,8 +87,22 @@ class VisionModelGym:
                                             observation_set=environment.ObservationSet.ALL,
                                             use_sparse_reward=True, frameStack=3)
 
+        gpus = tf.config.list_physical_devices('GPU')
+        if gpus:
+            # Restrict TensorFlow to only use the first GPU
+            try:
+                tf.config.set_visible_devices([], 'GPU')
+                tf.config.experimental.set_memory_growth(gpus[0], True)
+                logical_gpus = tf.config.list_logical_devices('GPU')
 
-        self.policy = policy_loading.policy_from_path(self.policy_path)
+                if rank == 0:
+                    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPU, using:", gpus[0])
+            except RuntimeError as e:
+                # Visible devices must be set before GPUs have been initialized
+                print(e)
+
+        with tf.device('/cpu:0'):
+            self.policy = policy_loading.policy_from_path(self.policy_path)
 
         if no_dr:
             self.randomize = None
@@ -107,14 +121,17 @@ class VisionModelGym:
                 print(e)
                 self.env_state = None
 
-        self.policy_state = self.policy.initial_state()
+        with tf.device('/cpu:0'):
+            self.policy_state = self.policy.initial_state()
 
     def next(self):
 
         if self.randomize is not None:
             self.randomize()
 
-        (action, _), self.policy_state = self.policy.step(self.env_state, self.policy_state)
+        with tf.device('/cpu:0'):
+            (action, _), self.policy_state = self.policy.step(self.env_state, self.policy_state)
+
         self.env_state = self.env.step(action)
 
         if (self.env_state.last()) or (self.env_state.reward == 1):

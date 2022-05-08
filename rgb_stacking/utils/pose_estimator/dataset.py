@@ -5,6 +5,7 @@ import time
 
 import tqdm
 from PIL import Image
+from stable_baselines3.common.vec_env import CloudpickleWrapper
 from torch.utils.data import Dataset
 import torch
 import numpy as np
@@ -21,15 +22,22 @@ KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
 
 
 class Buffer:
-    def __init__(self, buffer_size, total_workers, no_dr, debug):
+    def __init__(self, rank, buffer_size, total_workers, no_dr, debug):
         time.sleep(5)
-        self.env = VisionModelGym( mpi_tools.proc_id(), no_dr, debug )
-        print('Created Model/Resetting Env')
+        self.env = VisionModelGym(rank, no_dr, debug )
+
+        if rank == 0:
+            print('Created Model/Resetting Env')
         self.env.reset()
-        print('Reset successful')
+        self.rank = rank
+
+        if rank == 0:
+            print('Reset successful')
         self.N = total_workers
         self.n = buffer_size // self.N
-        print("Gathering {} Data Per {} workers".format(self.n, self.N))
+
+        if rank == 0:
+            print("rank {}: Gathering {} Data Per {} workers".format(self.rank, self.n, self.N))
 
         self.img_size = [self.n, 200, 200, 3]
         self.pose_size = [self.n, 21]
@@ -41,13 +49,99 @@ class Buffer:
 
     def gather(self):
         try:
-            for i in tqdm.tqdm(range(self.n)):
-                imgs, p = self.env.next()
-                self.fl[i], self.fr[i], self.bl[i], self.poses[i] = imgs['fl'], imgs['fl'], imgs['fl'], p
+            if self.rank == 0:
+                for i in tqdm.tqdm(range(self.n)):
+                    imgs, p = self.env.next()
+                    self.fl[i], self.fr[i], self.bl[i], self.poses[i] = imgs['fl'], imgs['fl'], imgs['fl'], p
+            else:
+                for i in range(self.n):
+                    imgs, p = self.env.next()
+                    self.fl[i], self.fr[i], self.bl[i], self.poses[i] = imgs['fl'], imgs['fl'], imgs['fl'], p
+
         except Exception as e:
             print(e)
             self.env.close()
             sys.exit()
+
+
+def _worker(
+    remote: mp.connection.Connection, parent_remote: mp.connection.Connection, env_fn_wrapper: CloudpickleWrapper
+) -> None:
+
+    parent_remote.close()
+    env = env_fn_wrapper.var()
+    while True:
+        try:
+            cmd, data = remote.recv()
+            if cmd == "gather":
+                env.gather()
+                remote.send((env.fr, env.fl, env.bl, env.poses))
+            elif cmd == "close":
+                env.env.reset()
+                remote.close()
+                break
+            else:
+                raise NotImplementedError(f"`{cmd}` is not implemented in the worker")
+        except EOFError:
+            break
+
+class VecBuffer:
+    def __init__(self, buffer_size, total_workers, no_dr, debug, start_method=None):
+        self.waiting = False
+        self.closed = False
+
+        if start_method is None:
+            # Fork is not a thread safe method (see issue #217)
+            # but is more user friendly (does not require to wrap the code in
+            # a `if __name__ == "__main__":`)
+            forkserver_available = "forkserver" in mp.get_all_start_methods()
+            start_method = "forkserver" if forkserver_available else "spawn"
+        self.ctx = mp.get_context(start_method)
+        self.job_queue = self.ctx.Queue(maxsize=64)
+
+        self.remotes, self.work_remotes = zip(*[self.ctx.Pipe() for _ in range(total_workers)])
+        self.processes = []
+
+        def make_env(rank, buffer_size, total_workers, no_dr, debug):
+            def thunk():
+                return Buffer(rank, buffer_size, total_workers, no_dr, debug)
+            return thunk
+
+        fns = [ make_env(i, buffer_size, total_workers, no_dr, debug) for i in range(total_workers) ]
+        for work_remote, remote, env_fn in tqdm.tqdm( zip(self.work_remotes, self.remotes, fns) ):
+            args = (work_remote, remote, CloudpickleWrapper(env_fn))
+            # daemon=True: if the main process crashes, we should not cause things to hang
+            process = self.ctx.Process(target=_worker, args=args, daemon=True)  # pytype:disable=attribute-error
+            process.start()
+            self.processes.append(process)
+            work_remote.close()
+
+    def reset(self):
+        for remote in self.remotes:
+            remote.send(("reset" , None))
+
+        for remote in self.remotes:
+            remote.recv()
+
+    def gather(self, N_total_batches):
+        try:
+            i = 0
+
+            for i in range(N_total_batches):
+                for remote in self.remotes:
+                    remote.send(("gather", None))
+                _data = [remote.recv() for remote in self.remotes]
+                fr, fl, bl, poses = zip(*_data)
+                yield np.vstack(fr), np.vstack(fl), np.vstack(bl), np.vstack(poses)
+        except Exception as e:
+            print(e)
+            sys.exit()
+
+    def close(self):
+        for remote in self.remotes:
+            remote.send(("close", None))
+        for process in self.processes:
+            process.join()
 
 
 class CustomDataset(Dataset):
@@ -76,7 +170,6 @@ class CustomDataset(Dataset):
 
         return images, label
 
-
 def setup_for_distributed(is_master):
     """
     This function disables printing when not in master process
@@ -101,7 +194,6 @@ def _load_data(parent_path, dfs):
             batch.append( (image_path, np.array([float(df[k][i]) for k in KEYS], float) ) )
     return batch
 
-
 def load_data(parent_path, sz=None, jobs=1):
     dfs = glob.glob(parent_path + '/data/*csv')
     dfs = dfs if sz is None else dfs[:sz]
@@ -122,7 +214,6 @@ def load_data(parent_path, sz=None, jobs=1):
             return batch
     else:
         return _load_data(*args[0])
-
 
 def view(batch, label):
     fl, fr, bl = batch
