@@ -35,7 +35,7 @@ def optimize(model,
              file,
              train_loss_min,
              name,
-             img_transform, target_transform,
+             img_transform, target_transform, total_training_batches,
              data):
     epoch, (fr, fl, bl, poses) = data
 
@@ -47,16 +47,15 @@ def optimize(model,
                                   num_workers=mp.cpu_count(),
                                   pin_memory=True)
 
-    train_loss = train_per_batch(train_dataloader,
+    train_loss, total_training_batches = train_per_batch(train_dataloader,
                                  model,
                                  N_training_samples,
                                  optimizer,
-                                 criterion, batch_size)
-    step_lr.step()
+                                 criterion, batch_size, step_lr, total_training_batches)
 
     # calculate average losses
     train_loss = train_loss / N_training_samples
-    print('\nEpoch: {} \tTraining Loss: {:.6f} LR: {}'.format(epoch, train_loss, step_lr.get_last_lr()))
+    print('\nEpoch: {}, Total_training_batches {} \tTraining Loss: {:.6f} LR: {}'.format(epoch, total_training_batches, train_loss, step_lr.get_last_lr()))
     file.add_scalar("Train Loss", train_loss, epoch)
 
     # save model if validation loss has decreasedN_total_batches
@@ -66,7 +65,7 @@ def optimize(model,
             train_loss))
         torch.save(model, '{}_model_{}.pt'.format(name, batch_size))
         train_loss_min = train_loss
-    return train_loss_min
+    return train_loss_min, total_training_batches
 
 
 def train(N_workers,
@@ -91,23 +90,26 @@ def train(N_workers,
     print(model)
     name = "large" if isinstance(model, LargeVisionModule) else "small"
     name += "no_dr" if no_dr else "dr"
+    name += socket.gethostname()
 
     if batch_size > 64:
         optimizer = LARS(model.parameters(),
                          lr=0.5,
                          max_epoch=N_total_batches)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 40000, gamma=0.5)
     else:
         optimizer = torch.optim.Adam(model.parameters(),
                                      lr=5e-4,
                                      weight_decay=1e-3)
 
-    step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 40000, gamma=0.5)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 20000, gamma=0.5)
 
     data_gen = VecBuffer(N_training_samples, N_workers, no_dr, debug, "forkserver")
     epoch = 0
+    total_training_batches = 0
     for data in data_gen.gather(N_total_batches):
         epoch += 1
-        train_loss_min = optimize(model,
+        train_loss_min, total_training_batches = optimize(model,
                  N_training_samples,
                  batch_size,
                  optimizer,
@@ -116,12 +118,12 @@ def train(N_workers,
                  file,
                  train_loss_min,
                  name,
-                 img_transform, target_transform,
+                 img_transform, target_transform, total_training_batches,
                  (epoch, data))
 
 
 
-def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size):
+def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size, step_lr, total_training_batches):
     ###################
     # train the model #
     ###################
@@ -146,8 +148,10 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
         optimizer.step()
 
         train_loss += l
+        total_training_batches += 1
+        step_lr.step()
 
-    return train_loss
+    return train_loss, total_training_batches
 
 
 def main(argv):
@@ -155,12 +159,12 @@ def main(argv):
     # HOME = os.environ["HOME"]
     # print(HOME)
 
-    N = 32
+    N = 128
     no_dr = True
     debug = False
-    batch_size = 256
-    N_training_samples = int(1e4)
-    N_total_batches = 300000
+    batch_size = 64
+    N_training_samples = int(1.5e5)
+    N_total_batches = 300000 if batch_size == 256 else 400000
 
     train(N, N_total_batches, N_training_samples, batch_size, no_dr, debug)
 

@@ -161,7 +161,9 @@ class CustomDataset(Dataset):
 
     @staticmethod
     def norm(x):
-        return (x + 0.25) / 0.50
+        x[:3] = (x[:3] + 0.25) / 0.50
+        x[3:7] = (x[3:7] + 1) / 2
+        return x
 
     def __getitem__(self, idx):
         images = { k : self.transform( torch.from_numpy(
@@ -169,7 +171,7 @@ class CustomDataset(Dataset):
                    for k in ['fl', 'fr', 'bl'] }
 
         pose = self.train_batch['poses'][idx]
-        pose[:3], pose[7:10], pose[14 : 17] = self.norm(pose[:3]), self.norm(pose[7:10]), self.norm(pose[14:17])
+        pose[:7], pose[7:14], pose[14:] = self.norm(pose[:7]), self.norm(pose[7:14]), self.norm(pose[14:])
 
         label = torch.from_numpy( pose ).float()
 
