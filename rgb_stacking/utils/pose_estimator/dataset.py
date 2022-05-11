@@ -16,18 +16,8 @@ import multiprocessing as mp
 from rgb_stacking.utils import mpi_tools
 from rgb_stacking.utils.get_data import VisionModelGym
 
-
-KEYS = ['rX', 'rY', 'rZ', 'rQ1', 'rQ2', 'rQ3', 'rQ4',
-        'bX', 'bY', 'bZ', 'bQ1', 'bQ2', 'bQ3', 'bQ4',
-        'gX', 'gY', 'gZ', 'gQ1', 'gQ2', 'gQ3', 'gQ4']
-
-
 class Buffer:
     def __init__(self, rank, buffer_size, total_workers, no_dr, debug):
-        parser = argparse.ArgumentParser('Runner')
-        parser.add_argument('-l', '--debug_specs', type=bool, default=False)
-        # parser.add_argument('-r', '--root', type=int)
-        args = parser.parse_args()
 
         self.env = VisionModelGym(rank, no_dr, debug )
 
@@ -161,8 +151,7 @@ class CustomDataset(Dataset):
 
     @staticmethod
     def norm(x):
-        x[:3] = (x[:3] + 0.25) / 0.50
-        x[3:7] = (x[3:7] + 1) / 2
+        x[:3] = x[:3] / 0.25
         return x
 
     def __getitem__(self, idx):

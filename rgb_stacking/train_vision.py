@@ -13,7 +13,7 @@ from numpy import uint8
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 from torchvision.transforms.transforms import Lambda
-from rgb_stacking.utils.pose_estimator.model import VisionModule, LargeVisionModule
+from rgb_stacking.utils.pose_estimator.model import VisionModule, LargeVisionModule, DETRWrapper
 from rgb_stacking.utils.pose_estimator.dataset import CustomDataset, Buffer, VecBuffer
 from rgb_stacking.utils.pose_estimator.lars import LARS
 import os
@@ -69,11 +69,27 @@ def optimize(model,
 
 
 def train(N_workers,
-          N_total_batches,
+          model_name,
           N_training_samples,
-          batch_size,
           no_dr,
-          debug=False):
+          debug=False,
+          focal_loss=False):
+
+    batch_size = 64
+    if model_name == "core":
+        model = VisionModule().cuda()
+    elif model_name == "detr":
+        model = DETRWrapper().cuda()
+    else:
+        model = LargeVisionModule().cuda()
+        batch_size = 256
+
+    N_total_batches = 300000
+    name = model_name
+    name += "no_dr" if no_dr else "dr"
+    name += socket.gethostname()
+
+    criterion = torch.nn.MSELoss() if not focal_loss else None
 
     if no_dr:
         img_transform = Lambda(lambd=lambda x: x / 255)
@@ -84,25 +100,27 @@ def train(N_workers,
 
     train_loss_min = np.inf
     file = SummaryWriter()
-    criterion = torch.nn.MSELoss()
-    print(torch.cuda.device_count())
-    model = VisionModule().cuda()
-    print(model)
-    name = "large" if isinstance(model, LargeVisionModule) else "small"
-    name += "no_dr" if no_dr else "dr"
-    name += socket.gethostname()
 
-    if batch_size > 64:
+    print(torch.cuda.device_count())
+
+    print(model)
+
+    if model_name == "core":
+        optimizer = torch.optim.Adam(model.parameters(),
+                                     lr=5e-4,
+                                     weight_decay=1e-3)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 20000, gamma=0.5)
+    elif model_name == 'detr':
+        optimizer = torch.optim.AdamW(model.parameters(),
+                                          lr=1e-4,
+                                          weight_decay=1e-4)
+        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 200000)
+    else:
         optimizer = LARS(model.parameters(),
                          lr=0.5,
                          max_epoch=N_total_batches)
         step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 40000, gamma=0.5)
-    else:
-        optimizer = torch.optim.Adam(model.parameters(),
-                                     lr=5e-4,
-                                     weight_decay=1e-3)
 
-        step_lr = torch.optim.lr_scheduler.StepLR(optimizer, 20000, gamma=0.5)
 
     data_gen = VecBuffer(N_training_samples, N_workers, no_dr, debug, "forkserver")
     epoch = 0
@@ -110,16 +128,16 @@ def train(N_workers,
     for data in data_gen.gather(N_total_batches):
         epoch += 1
         train_loss_min, total_training_batches = optimize(model,
-                 N_training_samples,
-                 batch_size,
-                 optimizer,
-                 criterion,
-                 step_lr,
-                 file,
-                 train_loss_min,
-                 name,
-                 img_transform, target_transform, total_training_batches,
-                 (epoch, data))
+                                                          N_training_samples,
+                                                          batch_size,
+                                                          optimizer,
+                                                          criterion,
+                                                          step_lr,
+                                                          file,
+                                                          train_loss_min,
+                                                          name,
+                                                          img_transform, target_transform, total_training_batches,
+                                                          (epoch, data))
 
 
 
@@ -156,17 +174,14 @@ def train_per_batch(train_loader, model, total, optimizer, criterion, batch_size
 
 def main(argv):
     init_env()
-    # HOME = os.environ["HOME"]
-    # print(HOME)
+    model = argv[1]
 
-    N = 128
+    N = 2
     no_dr = True
     debug = False
-    batch_size = 64
-    N_training_samples = int(1.5e5)
-    N_total_batches = 300000 if batch_size == 256 else 400000
+    N_training_samples = int(1.5e2)
 
-    train(N, N_total_batches, N_training_samples, batch_size, no_dr, debug)
+    train(N, model, N_training_samples, no_dr, debug)
 
 
 if __name__ == '__main__':
