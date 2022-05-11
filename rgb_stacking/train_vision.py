@@ -101,7 +101,10 @@ def train(N_workers,
     train_loss_min = np.inf
     file = SummaryWriter()
 
-    print(torch.cuda.device_count())
+    
+    if torch.cuda.device_count() > 1:
+        model = torch.nn.DataParallel( model )
+        
 
     print(model)
 
@@ -176,10 +179,10 @@ def main(argv):
     init_env()
     model = argv[1]
 
-    N = 2
+    N = 100
     no_dr = True
     debug = False
-    N_training_samples = int(1.5e2)
+    N_training_samples = int(1.5e5)
 
     train(N, model, N_training_samples, no_dr, debug)
 

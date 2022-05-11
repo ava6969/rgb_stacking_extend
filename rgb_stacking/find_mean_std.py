@@ -1,5 +1,8 @@
+import mpi4py
 import torchvision.transforms
-
+import mpi4py
+mpi4py.rc.initialize = False
+mpi4py.rc.finalize = True
 from rgb_stacking.utils.pose_estimator.dataset import VecBuffer
 import torch
 
@@ -20,7 +23,7 @@ def stat(df, name):
  print(name, ":", total_mean, total_std)
 
 if __name__ == '__main__':
- data_gen = VecBuffer(100000, 32, True, False, "forkserver")
+ data_gen = VecBuffer(1000000, 72, True, False, "forkserver")
  for data in data_gen.gather(1):
   fr, fl, bl, _ = data
   stat(fr, 'fr')

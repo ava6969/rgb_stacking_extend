@@ -152,7 +152,7 @@ class CustomDataset(Dataset):
 
     @staticmethod
     def norm(x):
-        x[:3] = x[:3] / 0.25
+        # x[:3] = x[:3] / 0.25
         return x
 
     def __getitem__(self, idx):

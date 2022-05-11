@@ -22,7 +22,7 @@ max_workspace_limits =  _VALID_SIZE / 2
 
 
 def relative_pose(pose):
-    pose[:3] = np.clip(pose[:3] - WORKSPACE_CENTER, min_workspace_limits, max_workspace_limits)
+    # pose[:3] = np.clip(pose[:3] - WORKSPACE_CENTER, min_workspace_limits, max_workspace_limits)
     return pose
 
 
