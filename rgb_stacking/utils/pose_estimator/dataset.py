@@ -72,7 +72,7 @@ def _worker(
                 env.gather()
                 remote.send((env.fr, env.fl, env.bl, env.poses))
             elif cmd == "close":
-                env.env.reset()
+                env.env.close()
                 remote.close()
                 break
             else:
@@ -135,6 +135,7 @@ class VecBuffer:
     def close(self):
         for remote in self.remotes:
             remote.send(("close", None))
+
         for process in self.processes:
             process.join()
 
