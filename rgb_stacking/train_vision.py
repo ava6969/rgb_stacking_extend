@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from _weakref import ref
 
+import torchvision.transforms
 from absl import app
 from stable_baselines3.common.vec_env import CloudpickleWrapper
 
@@ -180,8 +181,8 @@ def main(argv):
     model = argv[1]
 
     N = 100
-    no_dr = True
-    debug = False
+    no_dr = False
+    debug = True
     N_training_samples = int(1.5e5)
 
     train(N, model, N_training_samples, no_dr, debug)

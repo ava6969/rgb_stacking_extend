@@ -111,7 +111,7 @@ def run(args, envs, policy, agent, rollouts, writer, device, rollout_per_learner
                     rollouts.get_from_recurrent_state(step),
                     rollouts.masks[step])
 
-            obs, reward, done, infos = envs.step(action)
+            obs, reward, done, infos = envs.step(action).result
 
             for info in infos:
                 if 'episode' in info.keys():
@@ -253,7 +253,7 @@ def main(argv: Sequence[str]) -> None:
                               args.model.hidden_size)
 
     avg_grad_comm, rollout_per_learner_comm = mpi_groups(args)
-    obs = envs.reset()
+    obs = envs.reset()[0]
     for k, o in obs.items():
         rollouts.obs[k][0].copy_(o)
 

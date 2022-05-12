@@ -1,0 +1,38 @@
+env_name: StackRGBTrain-v2
+
+num_envs_per_cpu: 64
+num_learners: 1
+use_multi_thread: True
+
+device: cuda
+seed: 1
+log_interval: 5
+save_interval: 5
+num_env_steps: 1.0e+7
+log_dir: '/tmp/gym/'
+save_dir: './benchmark_model_attn'
+eval_interval: null
+
+plr: 5.0e-4
+vlr: 5.0e-4
+alpha: 0.99
+gamma: 0.99
+eps: 1.0e-5
+max_grad_norm: 0.5
+
+gae_lambda: 0.95
+entropy_coef: 0.01
+num_mini_batch: 4
+ppo_epoch: 4
+num_steps: 128
+
+model:
+  hidden_size: 512
+
+  feature_extract:
+    embed_out: 256
+    act_fn: relu
+    post: attn
+    heads: 4
+    attn_embed_dim: 256
+    max_pool_out: False
