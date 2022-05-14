@@ -43,7 +43,10 @@ actor_critic, obs_rms = \
 
 print(actor_critic)
 
-envs = ['StackRGBTestTripletActorDict-v{}'.format(i) for i in range(5) ]
+if str(args.env_name).startswith('StackRGBTrain-v1'):
+    envs = ['StackRGBTestTriplet-v{}'.format(i) for i in range(5) ]
+else:
+    envs = ['StackRGBTestTripletActorDict-v{}'.format(i) for i in range(5)]
 
 for env_name in envs:
     env = VecPyTorch(make_vec_envs(
@@ -76,29 +79,7 @@ for env_name in envs:
             masks.fill_(0.0 if done else 1.0)
             return action
 
-    viewer.launch(env, policy_ )
-
-    # obs = env.reset()
-
-    # if render_func is not None:
-    #     screen = render_func('rgbarray')
-
-
-    # while True:
-    #     with torch.no_grad():
-    #         value, action, _, recurrent_hidden_states = actor_critic.act(
-    #             obs, recurrent_hidden_states, masks, deterministic=args.det)
-    #
-    #     # Obser reward and next obs
-    #     obs, reward, done, _ = env.step(action)
-    #     returns += reward
-    #     masks.fill_(0.0 if done else 1.0)
-
-        # if render_func is not None:
-        #     render_func('human')
-
-        # if done:
-        #     break
+    viewer.launch(env, policy_)
 
     print('Total Returns: ', returns)
     env.close()

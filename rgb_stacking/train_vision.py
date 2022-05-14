@@ -64,7 +64,7 @@ def optimize(model,
         print('\nTraining loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
             train_loss_min,
             train_loss))
-        torch.save(model, '{}_model_{}.pt'.format(name, batch_size))
+        torch.save(model.state_dict(), '{}_model_{}.pt'.format(name, batch_size))
         train_loss_min = train_loss
     return train_loss_min, total_training_batches
 
